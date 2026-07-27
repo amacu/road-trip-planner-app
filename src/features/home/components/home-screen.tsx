@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 
 export function HomeScreen({
@@ -57,14 +58,14 @@ export function HomeScreen({
       <div className="pointer-events-none fixed inset-0 z-0 bg-[radial-gradient(rgba(22,19,13,.045)_1px,transparent_1px)] bg-[length:24px_24px]" />
       <div className="relative z-10">
         <nav className="mx-auto flex max-w-[1200px] items-center justify-between px-8 py-[26px]">
-          <div className="flex items-center gap-[11px]">
-            <div className="grid size-[34px] place-items-center rounded-[11px] bg-[#E4562A] shadow-[0_6px_16px_-6px_rgba(228,86,42,.7)]">
-              <div className="size-[11px] rounded-full bg-white" />
-            </div>
-            <span className="font-['Bricolage_Grotesque'] text-[21px] font-extrabold tracking-[-0.03em]">
-              Milepost
-            </span>
-          </div>
+          <Image
+            src="/logo.png"
+            alt="Tripzo"
+            width={480}
+            height={160}
+            priority
+            className="h-[42px] w-auto object-contain"
+          />
           <div className="flex items-center gap-[30px]">
             <div className="hidden gap-[26px] text-[14.5px] font-semibold text-[#5a5346] sm:flex">
               <span>Features</span>

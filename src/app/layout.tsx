@@ -27,6 +27,17 @@ export const metadata: Metadata = {
   title: "RoadTrip Planner — Plan multi-day drives with stops & maps",
   description:
     "Plan multi-day road trips with day-by-day stops, an interactive map, and one-click Google Maps navigation.",
+  icons: {
+    icon: [
+      {
+        url: "/logo-box.png?v=2",
+        type: "image/png",
+        sizes: "160x160",
+      },
+    ],
+    shortcut: "/logo-box.png?v=2",
+    apple: [{ url: "/logo-box.png?v=2", sizes: "160x160" }],
+  },
   openGraph: {
     title: "RoadTrip Planner",
     description:
