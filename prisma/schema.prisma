@@ -1,0 +1,232 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Vehicle {
+  id                       String   @id @default(uuid()) @db.Uuid
+  userId                   String   @map("user_id") @db.Uuid
+  name                     String
+  type                     String?
+  fuelType                 String   @map("fuel_type")
+  licensePlate             String?  @map("license_plate")
+  fuelConsumptionLPer100km Decimal  @map("fuel_consumption_l_per_100km") @db.Decimal(8, 2)
+  tankCapacityL            Decimal  @map("tank_capacity_l") @db.Decimal(8, 2)
+  isDefault                Boolean  @default(false) @map("is_default")
+  createdAt                DateTime @default(now()) @map("created_at")
+  updatedAt                DateTime @updatedAt @map("updated_at")
+
+  trips Trip[]
+
+  @@index([userId])
+  @@map("vehicles")
+}
+
+model Trip {
+  id           String    @id @default(uuid()) @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  vehicleId    String?   @map("vehicle_id") @db.Uuid
+  name         String
+  description  String?
+  startDate    DateTime? @map("start_date") @db.Date
+  heroImageUrl String?   @map("hero_image_url")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  vehicle Vehicle?   @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+  days       TripDay[]
+  stops      TripStop[]
+  activities TripActivity[]
+  members    TripMember[]
+  stays      TripStay[]
+  packingItems TripPackingItem[]
+
+  @@index([userId])
+  @@index([vehicleId])
+  @@map("trips")
+}
+
+model TripPackingItem {
+  id          String   @id @default(uuid()) @db.Uuid
+  tripId      String   @map("trip_id") @db.Uuid
+  name        String
+  category    String
+  acquisition String   @default("have")
+  quantity    Int      @default(1)
+  notes       String?
+  isPacked    Boolean  @default(false) @map("is_packed")
+  itemOrder   Int      @default(0) @map("item_order")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  trip Trip @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  @@index([tripId, itemOrder])
+  @@index([tripId, category])
+  @@map("trip_packing_items")
+}
+
+model TripMember {
+  id        String   @id @default(uuid()) @db.Uuid
+  tripId    String   @map("trip_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  role      String   @default("editor")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  trip Trip         @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  user UserProfile? @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  @@unique([tripId, userId])
+  @@index([userId])
+  @@index([tripId])
+  @@map("trip_members")
+}
+
+model UserProfile {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @unique @map("user_id") @db.Uuid
+  email     String   @unique
+  fullName  String?  @map("full_name")
+  username  String?  @unique
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tripMemberships TripMember[]
+
+  @@index([fullName])
+  @@index([username])
+  @@map("user_profiles")
+}
+
+model TripDay {
+  id        String    @id @default(uuid()) @db.Uuid
+  tripId    String    @map("trip_id") @db.Uuid
+  dayNumber Int       @map("day_number")
+  date      DateTime? @db.Date
+  name      String?
+  startTime String?   @map("start_time")
+  notes     String?
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  trip       Trip           @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  stops      TripStop[]
+  activities TripActivity[]
+  stayAfter  TripStay?
+
+  @@unique([tripId, dayNumber])
+  @@index([tripId])
+  @@map("trip_days")
+}
+
+model TripStay {
+  id             String   @id @default(uuid()) @db.Uuid
+  tripId         String   @map("trip_id") @db.Uuid
+  afterDayId     String   @unique @map("after_day_id") @db.Uuid
+  name           String
+  stayType       String   @map("stay_type")
+  status         String   @default("planned")
+  address        String?
+  latitude       Decimal? @db.Decimal(10, 7)
+  longitude      Decimal? @db.Decimal(10, 7)
+  countryCode    String?  @map("country_code")
+  checkInTime    String?  @map("check_in_time")
+  checkOutTime   String?  @map("check_out_time")
+  price          Decimal? @db.Decimal(10, 2)
+  currency       String   @default("PLN")
+  bookingUrl     String?  @map("booking_url")
+  confirmation   String?
+  notes          String?
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  trip     Trip    @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  afterDay TripDay @relation(fields: [afterDayId], references: [id], onDelete: Cascade)
+
+  @@index([tripId])
+  @@map("trip_stays")
+}
+
+model TripStop {
+  id               String   @id @default(uuid()) @db.Uuid
+  tripId           String   @map("trip_id") @db.Uuid
+  tripDayId        String?  @map("trip_day_id") @db.Uuid
+  stopOrder        Int      @map("stop_order")
+  name             String
+  address          String?
+  latitude         Decimal? @db.Decimal(10, 7)
+  longitude        Decimal? @db.Decimal(10, 7)
+  googleMapsUrl    String?  @map("google_maps_url")
+  placeId          String?  @map("place_id")
+  countryCode      String?  @map("country_code")
+  stopType         String   @default("stop") @map("stop_type")
+  travelMode       String   @default("driving") @map("travel_mode")
+  startTime        String?  @map("start_time")
+  endTime          String?  @map("end_time")
+  category         String?
+  description      String?
+  visitDurationMin Int?     @map("visit_duration_min")
+  notes            String?
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  trip       Trip           @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  day        TripDay?       @relation(fields: [tripDayId], references: [id], onDelete: Cascade)
+  activities TripActivity[]
+
+  // Postgres treats each NULL as distinct for a unique index, so this still
+  // allows only one ordering per real day while placing no limit on how
+  // many unassigned (tripDayId IS NULL) stops a trip can have.
+  @@unique([tripDayId, stopOrder])
+  @@index([tripId])
+  @@index([tripDayId])
+  @@map("trip_stops")
+}
+
+model TripActivity {
+  id            String   @id @default(uuid()) @db.Uuid
+  tripId        String   @map("trip_id") @db.Uuid
+  tripDayId     String?  @map("trip_day_id") @db.Uuid
+  tripStopId    String   @map("trip_stop_id") @db.Uuid
+  activityOrder Int      @map("activity_order")
+  title         String
+  address       String?
+  latitude      Decimal? @db.Decimal(10, 7)
+  longitude     Decimal? @db.Decimal(10, 7)
+  googleMapsUrl String?  @map("google_maps_url")
+  placeId       String?  @map("place_id")
+  description   String?
+  startTime     String?  @map("start_time")
+  endTime       String?  @map("end_time")
+  category      String   @default("sightseeing")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  trip Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  day  TripDay? @relation(fields: [tripDayId], references: [id], onDelete: Cascade)
+  stop TripStop @relation(fields: [tripStopId], references: [id], onDelete: Cascade)
+
+  @@unique([tripStopId, activityOrder])
+  @@index([tripId])
+  @@index([tripDayId])
+  @@index([tripStopId])
+  @@map("trip_activities")
+}
+
+model FuelPrice {
+  id           String   @id @default(uuid()) @db.Uuid
+  countryCode  String   @map("country_code")
+  countryName  String   @map("country_name")
+  fuelType     String   @map("fuel_type")
+  pricePlnPerL Decimal  @map("price_pln_per_l") @db.Decimal(8, 3)
+  source       String   @default("manual")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@unique([countryCode, fuelType])
+  @@map("fuel_prices")
+}
