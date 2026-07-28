@@ -28,13 +28,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { CollapsedSidebar } from "@/components/layout/collapsed-sidebar";
-import { getFuelPriceCountriesAction } from "@/features/fuel/actions";
-import { EmptyFuelState } from "@/features/fuel/components/empty-fuel-state";
 import { FuelDashboard } from "@/features/fuel/components/fuel-dashboard";
 import { HomeScreen } from "@/features/home/components/home-screen";
 import {
   createTripPackingItemAction,
   deleteTripPackingItemAction,
+  updateTripPackingCategoriesAction,
   updateTripPackingItemAction,
 } from "@/features/trip-packing/actions";
 import {
@@ -90,6 +89,7 @@ import { openInGoogleMaps } from "@/lib/integrations/google-maps";
 import type { TripUpdateInput } from "@/lib/validators/trip";
 import type { TripStayInput } from "@/lib/validators/trip-stay";
 import type {
+  PackingCategory,
   TripPackingItemInput,
   TripPackingItemUpdateInput,
 } from "@/lib/validators/trip-packing-item";
@@ -172,6 +172,7 @@ export function PlannerView({
   currentUserFullName,
   currentUserEmail,
   currentUserAvatarUrl,
+  initialFuelPrices,
 }: {
   trip: TripPlain;
   vehicles: VehiclePlain[];
@@ -180,6 +181,7 @@ export function PlannerView({
   currentUserFullName?: string | null;
   currentUserEmail?: string | null;
   currentUserAvatarUrl?: string | null;
+  initialFuelPrices: FuelCountryPrice[];
 }) {
   const router = useRouter();
   // Local, optimistically-mutable mirror of trip.days. Drag-and-drop (and
@@ -204,7 +206,13 @@ export function PlannerView({
   }, [trip.stays]);
 
   const [packingItems, setPackingItems] = useState(trip.packingItems);
+  const [packingCategories, setPackingCategories] = useState(
+    trip.packingCategories,
+  );
   const packingItemsRef = useRef(trip.packingItems);
+  useEffect(() => {
+    setPackingCategories(trip.packingCategories);
+  }, [trip.packingCategories]);
   const pendingPackingUpdates = useRef(
     new Map<
       string,
@@ -231,23 +239,9 @@ export function PlannerView({
   // and shows its activities as extra pins while it's selected.
   const [selectedStopId, setSelectedStopId] = useState<string | null>(null);
   const [tab, setTab] = useState<ViewKey>("overview");
-  const [fuelPrices, setFuelPrices] = useState<FuelCountryPrice[]>([]);
+  const [fuelPrices] = useState<FuelCountryPrice[]>(initialFuelPrices);
   const discardedOptimisticStopIds = useRef(new Set<string>());
   const discardedOptimisticActivityIds = useRef(new Set<string>());
-
-  useEffect(() => {
-    let active = true;
-    getFuelPriceCountriesAction()
-      .then((prices) => {
-        if (active) setFuelPrices(prices);
-      })
-      .catch(() => {
-        if (active) setFuelPrices([]);
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
 
   const isOwner = trip.ownerId === currentUserId;
   const currentDay = days.find((d) => d.id === activeDayId) ?? days[0];
@@ -400,6 +394,9 @@ export function PlannerView({
       acquisition: input.acquisition,
       quantity: input.quantity,
       notes: input.notes?.trim() || null,
+      price: input.price ?? null,
+      productLinks: input.productLinks,
+      isPurchased: input.isPurchased,
       isPacked: input.isPacked,
       itemOrder:
         packingItems.reduce(
@@ -518,6 +515,40 @@ export function PlannerView({
       toast.error(result.error);
       return false;
     }
+    return true;
+  }
+
+  async function savePackingCategories(categories: PackingCategory[]) {
+    const previousById = new Map(
+      packingCategories.map((category) => [category.id, category.name]),
+    );
+    const result = await updateTripPackingCategoriesAction(trip.id, categories);
+    if (!result.success) {
+      toast.error(result.error);
+      return false;
+    }
+
+    const renamed = new Map<string, string>();
+    for (const category of result.data) {
+      const previousName = previousById.get(category.id);
+      if (previousName && previousName !== category.name) {
+        renamed.set(previousName, category.name);
+      }
+    }
+    const fallback =
+      result.data.find((category) => category.name === "Other")?.name ??
+      result.data[0].name;
+    const validNames = new Set(result.data.map((category) => category.name));
+    const nextItems = packingItemsRef.current.map((item) => ({
+      ...item,
+      category:
+        renamed.get(item.category) ??
+        (validNames.has(item.category) ? item.category : fallback),
+    }));
+    packingItemsRef.current = nextItems;
+    setPackingItems(nextItems);
+    setPackingCategories(result.data);
+    toast.success("Categories updated.");
     return true;
   }
 
@@ -1172,6 +1203,8 @@ export function PlannerView({
             tripTotalKm={tripTotalKm}
             tripTotalMin={tripTotalMin}
             tripFuelPln={tripFuelPln}
+            fuelPlan={fuelPlan}
+            fuelVehicle={selectedVehicle}
             onSaveTrip={handleSaveTrip}
             onDeleteTrip={handleDeleteTrip}
             onSelectDay={openDayInPlanner}
@@ -1340,30 +1373,19 @@ export function PlannerView({
 
         {tab === "fuel" && (
           <div className="min-h-0 flex-1 overflow-y-auto">
-            {selectedVehicle ? (
-              <FuelDashboard
-                plan={fuelPlan}
-                vehicle={selectedVehicle}
-                stays={stays.filter(
-                  (stay) => stay.afterDayId !== days[days.length - 1]?.id,
-                )}
-                packingItems={packingItems}
-                onCreatePackingItem={createPackingItem}
-                onUpdatePackingItem={updatePackingItem}
-                onDeletePackingItem={deletePackingItem}
-              />
-            ) : (
-              <EmptyFuelState
-                isOwner={isOwner}
-                stays={stays.filter(
-                  (stay) => stay.afterDayId !== days[days.length - 1]?.id,
-                )}
-                packingItems={packingItems}
-                onCreatePackingItem={createPackingItem}
-                onUpdatePackingItem={updatePackingItem}
-                onDeletePackingItem={deletePackingItem}
-              />
-            )}
+            <FuelDashboard
+              stays={stays.filter(
+                (stay) => stay.afterDayId !== days[days.length - 1]?.id,
+              )}
+              packingItems={packingItems}
+              packingCategories={packingCategories}
+              onCreatePackingItem={createPackingItem}
+              onUpdatePackingItem={updatePackingItem}
+              onDeletePackingItem={deletePackingItem}
+              onUpdatePackingCategories={savePackingCategories}
+              onSaveStay={saveStay}
+              onDeleteStay={removeStay}
+            />
           </div>
         )}
 

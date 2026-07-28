@@ -8,6 +8,7 @@ import type {
   TripStayPlain,
 } from "@/features/trips/lib/trip-view-model";
 import type {
+  PackingCategory,
   TripPackingItemInput,
   TripPackingItemUpdateInput,
 } from "@/lib/validators/trip-packing-item";
@@ -16,19 +17,25 @@ export function EmptyFuelState({
   isOwner,
   stays,
   packingItems,
+  packingCategories,
   onCreatePackingItem,
   onUpdatePackingItem,
   onDeletePackingItem,
+  onUpdatePackingCategories,
 }: {
   isOwner: boolean;
   stays: TripStayPlain[];
   packingItems: TripPackingItemPlain[];
+  packingCategories: PackingCategory[];
   onCreatePackingItem: (input: TripPackingItemInput) => Promise<boolean>;
   onUpdatePackingItem: (
     itemId: string,
     input: TripPackingItemUpdateInput,
   ) => Promise<boolean>;
   onDeletePackingItem: (itemId: string) => Promise<boolean>;
+  onUpdatePackingCategories: (
+    categories: PackingCategory[],
+  ) => Promise<boolean>;
 }) {
   return (
     <div className="min-h-full bg-[#fffaf0] p-5 pb-28 md:p-10">
@@ -67,9 +74,11 @@ export function EmptyFuelState({
         </div>
         <PackingDashboard
           items={packingItems}
+          categories={packingCategories}
           onCreate={onCreatePackingItem}
           onUpdate={onUpdatePackingItem}
           onDelete={onDeletePackingItem}
+          onUpdateCategories={onUpdatePackingCategories}
         />
       </div>
     </div>

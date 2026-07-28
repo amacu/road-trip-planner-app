@@ -28,22 +28,23 @@ model Vehicle {
 }
 
 model Trip {
-  id           String    @id @default(uuid()) @db.Uuid
-  userId       String    @map("user_id") @db.Uuid
-  vehicleId    String?   @map("vehicle_id") @db.Uuid
-  name         String
-  description  String?
-  startDate    DateTime? @map("start_date") @db.Date
-  heroImageUrl String?   @map("hero_image_url")
-  createdAt    DateTime  @default(now()) @map("created_at")
-  updatedAt    DateTime  @updatedAt @map("updated_at")
+  id                String    @id @default(uuid()) @db.Uuid
+  userId            String    @map("user_id") @db.Uuid
+  vehicleId         String?   @map("vehicle_id") @db.Uuid
+  name              String
+  description       String?
+  startDate         DateTime? @map("start_date") @db.Date
+  heroImageUrl      String?   @map("hero_image_url")
+  packingCategories Json?     @map("packing_categories")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
 
-  vehicle Vehicle?   @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
-  days       TripDay[]
-  stops      TripStop[]
-  activities TripActivity[]
-  members    TripMember[]
-  stays      TripStay[]
+  vehicle      Vehicle?          @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+  days         TripDay[]
+  stops        TripStop[]
+  activities   TripActivity[]
+  members      TripMember[]
+  stays        TripStay[]
   packingItems TripPackingItem[]
 
   @@index([userId])
@@ -52,17 +53,20 @@ model Trip {
 }
 
 model TripPackingItem {
-  id          String   @id @default(uuid()) @db.Uuid
-  tripId      String   @map("trip_id") @db.Uuid
-  name        String
-  category    String
-  acquisition String   @default("have")
-  quantity    Int      @default(1)
-  notes       String?
-  isPacked    Boolean  @default(false) @map("is_packed")
-  itemOrder   Int      @default(0) @map("item_order")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id           String   @id @default(uuid()) @db.Uuid
+  tripId       String   @map("trip_id") @db.Uuid
+  name         String
+  category     String
+  acquisition  String   @default("have")
+  quantity     Int      @default(1)
+  notes        String?
+  price        Decimal? @db.Decimal(10, 2)
+  productLinks Json?    @map("product_links")
+  isPurchased  Boolean  @default(false) @map("is_purchased")
+  isPacked     Boolean  @default(false) @map("is_packed")
+  itemOrder    Int      @default(0) @map("item_order")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
 
   trip Trip @relation(fields: [tripId], references: [id], onDelete: Cascade)
 
@@ -125,25 +129,25 @@ model TripDay {
 }
 
 model TripStay {
-  id             String   @id @default(uuid()) @db.Uuid
-  tripId         String   @map("trip_id") @db.Uuid
-  afterDayId     String   @unique @map("after_day_id") @db.Uuid
-  name           String
-  stayType       String   @map("stay_type")
-  status         String   @default("planned")
-  address        String?
-  latitude       Decimal? @db.Decimal(10, 7)
-  longitude      Decimal? @db.Decimal(10, 7)
-  countryCode    String?  @map("country_code")
-  checkInTime    String?  @map("check_in_time")
-  checkOutTime   String?  @map("check_out_time")
-  price          Decimal? @db.Decimal(10, 2)
-  currency       String   @default("PLN")
-  bookingUrl     String?  @map("booking_url")
-  confirmation   String?
-  notes          String?
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
+  id           String   @id @default(uuid()) @db.Uuid
+  tripId       String   @map("trip_id") @db.Uuid
+  afterDayId   String   @unique @map("after_day_id") @db.Uuid
+  name         String
+  stayType     String   @map("stay_type")
+  status       String   @default("planned")
+  address      String?
+  latitude     Decimal? @db.Decimal(10, 7)
+  longitude    Decimal? @db.Decimal(10, 7)
+  countryCode  String?  @map("country_code")
+  checkInTime  String?  @map("check_in_time")
+  checkOutTime String?  @map("check_out_time")
+  price        Decimal? @db.Decimal(10, 2)
+  currency     String   @default("PLN")
+  bookingUrl   String?  @map("booking_url")
+  confirmation String?
+  notes        String?
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
 
   trip     Trip    @relation(fields: [tripId], references: [id], onDelete: Cascade)
   afterDay TripDay @relation(fields: [afterDayId], references: [id], onDelete: Cascade)

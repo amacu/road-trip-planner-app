@@ -197,7 +197,7 @@ export function PreviousStayBanner({
   );
 }
 
-function StayDialog({
+export function StayDialog({
   open,
   onOpenChange,
   dayId,

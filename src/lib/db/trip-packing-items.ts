@@ -1,8 +1,15 @@
+import { Prisma } from "@prisma/client";
+
 import { prisma } from "@/lib/prisma";
 import { tripWriteAccessWhere } from "@/lib/db/trip-access";
 import type {
+  PackingCategory,
   TripPackingItemInput,
   TripPackingItemUpdateInput,
+} from "@/lib/validators/trip-packing-item";
+import {
+  DEFAULT_PACKING_CATEGORIES,
+  packingCategoriesSchema,
 } from "@/lib/validators/trip-packing-item";
 
 function packingItemData(
@@ -14,6 +21,17 @@ function packingItemData(
     acquisition: data.acquisition,
     quantity: data.quantity,
     notes: data.notes === undefined ? undefined : data.notes?.trim() || null,
+    price:
+      data.price === undefined
+        ? undefined
+        : data.price === null
+          ? null
+          : new Prisma.Decimal(data.price),
+    productLinks:
+      data.productLinks === undefined
+        ? undefined
+        : (data.productLinks as Prisma.InputJsonValue),
+    isPurchased: data.isPurchased,
     isPacked: data.isPacked,
     itemOrder: data.itemOrder,
   };
@@ -65,4 +83,53 @@ export async function deleteTripPackingItem(itemId: string, userId: string) {
     where: { id: itemId, trip: tripWriteAccessWhere(userId) },
   });
   return result.count > 0;
+}
+
+export async function updateTripPackingCategories(
+  tripId: string,
+  userId: string,
+  categories: PackingCategory[],
+) {
+  const trip = await prisma.trip.findFirst({
+    where: { id: tripId, ...tripWriteAccessWhere(userId) },
+    select: { id: true, packingCategories: true },
+  });
+  if (!trip) return null;
+
+  const parsedCurrent = packingCategoriesSchema.safeParse(
+    trip.packingCategories,
+  );
+  const current = parsedCurrent.success
+    ? parsedCurrent.data
+    : DEFAULT_PACKING_CATEGORIES;
+  const nextById = new Map(
+    categories.map((category) => [category.id, category]),
+  );
+  const fallback =
+    categories.find((category) => category.name === "Other")?.name ??
+    categories[0].name;
+
+  await prisma.$transaction(async (transaction) => {
+    for (const category of current) {
+      const next = nextById.get(category.id);
+      if (!next) {
+        await transaction.tripPackingItem.updateMany({
+          where: { tripId, category: category.name },
+          data: { category: fallback },
+        });
+      } else if (next.name !== category.name) {
+        await transaction.tripPackingItem.updateMany({
+          where: { tripId, category: category.name },
+          data: { category: next.name },
+        });
+      }
+    }
+
+    await transaction.trip.update({
+      where: { id: tripId },
+      data: { packingCategories: categories as Prisma.InputJsonValue },
+    });
+  });
+
+  return categories;
 }

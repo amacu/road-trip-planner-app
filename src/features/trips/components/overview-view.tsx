@@ -18,6 +18,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { FuelOverviewCard } from "@/features/fuel/components/fuel-overview-card";
+import type { FuelPlan } from "@/features/fuel/lib/fuel-plan";
 import { MapView } from "@/features/trip-stops/components/map-view";
 import {
   addTripMemberAction,
@@ -46,6 +48,8 @@ export function OverviewView({
   tripTotalKm,
   tripTotalMin,
   tripFuelPln,
+  fuelPlan,
+  fuelVehicle,
   onSaveTrip,
   onDeleteTrip,
   onSelectDay,
@@ -57,6 +61,8 @@ export function OverviewView({
   tripTotalKm: number;
   tripTotalMin: number;
   tripFuelPln: number;
+  fuelPlan: FuelPlan | null;
+  fuelVehicle: VehiclePlain | null;
   onSaveTrip: (patch: TripUpdateInput) => Promise<void>;
   onDeleteTrip: () => void;
   onSelectDay: (dayId: string) => void;
@@ -80,12 +86,6 @@ export function OverviewView({
       value: formatDuration(tripTotalMin),
       sub: `across ${days.length} ${days.length === 1 ? "day" : "days"}`,
       color: "#2E7A57",
-    },
-    {
-      label: "Fuel cost",
-      value: `${Math.round(tripFuelPln)} PLN`,
-      sub: "estimated total",
-      color: "#6E9BC0",
     },
   ];
   const people = [
@@ -136,10 +136,14 @@ export function OverviewView({
           </div>
         </div>
 
-        <div className="mt-8 grid grid-cols-3 gap-3">
+        <div className="mt-8 grid grid-cols-2 gap-3">
           {statCards.map((card) => (
             <StatCard key={card.label} {...card} />
           ))}
+        </div>
+
+        <div className="mt-4">
+          <FuelOverviewCard plan={fuelPlan} vehicle={fuelVehicle} />
         </div>
 
         <div className="mt-4">

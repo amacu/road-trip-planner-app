@@ -5,6 +5,13 @@ import type {
   UnassignedTripStopRecord,
 } from "@/types/trip";
 import type { Vehicle } from "@prisma/client";
+import {
+  DEFAULT_PACKING_CATEGORIES,
+  packingCategoriesSchema,
+  productLinksSchema,
+  type PackingCategory,
+  type ProductLink,
+} from "@/lib/validators/trip-packing-item";
 
 /**
  * Plain, JSON-serializable mirrors of the Prisma models above. Server
@@ -190,6 +197,7 @@ export type TripPlain = {
   unassignedStops: StopPoint[];
   stays: TripStayPlain[];
   packingItems: TripPackingItemPlain[];
+  packingCategories: PackingCategory[];
 };
 
 export type TripPackingItemPlain = {
@@ -199,6 +207,9 @@ export type TripPackingItemPlain = {
   acquisition: string;
   quantity: number;
   notes: string | null;
+  price: number | null;
+  productLinks: ProductLink[];
+  isPurchased: boolean;
   isPacked: boolean;
   itemOrder: number;
 };
@@ -262,10 +273,26 @@ export function toTripPlain(trip: TripWithRelations): TripPlain {
       acquisition: item.acquisition,
       quantity: item.quantity,
       notes: item.notes,
+      price: item.price?.toNumber() ?? null,
+      productLinks: normalizeProductLinks(item.productLinks),
+      isPurchased: item.isPurchased,
       isPacked: item.isPacked,
       itemOrder: item.itemOrder,
     })),
+    packingCategories: normalizePackingCategories(trip.packingCategories),
   };
+}
+
+function normalizePackingCategories(value: unknown): PackingCategory[] {
+  const parsed = packingCategoriesSchema.safeParse(value);
+  return parsed.success
+    ? parsed.data
+    : DEFAULT_PACKING_CATEGORIES.map((category) => ({ ...category }));
+}
+
+function normalizeProductLinks(value: unknown): ProductLink[] {
+  const parsed = productLinksSchema.safeParse(value);
+  return parsed.success ? parsed.data : [];
 }
 
 /**

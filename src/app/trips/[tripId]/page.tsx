@@ -7,6 +7,7 @@ import {
   toVehiclePlain,
 } from "@/features/trips/lib/trip-view-model";
 import { requireAuthenticatedUser } from "@/lib/auth/guards";
+import { getCachedFuelPriceCountries } from "@/lib/db/fuel-prices";
 import { getUserProfileByUserId } from "@/lib/db/user-profiles";
 import { getTripById, getTripSwitcherItems } from "@/lib/db/trips";
 import { getVehicles } from "@/lib/db/vehicles";
@@ -25,16 +26,31 @@ export default async function TripPlannerPage({
 }) {
   const { tripId } = await params;
   const user = await requireAuthenticatedUser();
-  const [trip, vehicles, trips] = await Promise.all([
+  const [trip, vehicles, trips, fuelPrices] = await Promise.all([
     getTripById(tripId, user.id),
     getVehicles(user.id),
     getTripSwitcherItems(user.id),
+    getCachedFuelPriceCountries(),
   ]);
 
   if (!trip) notFound();
-  const ownerProfile = await getUserProfileByUserId(trip.userId);
-  const plainTrip = toTripPlain(trip);
   const userMetadata = user.user_metadata ?? {};
+  const ownerProfile =
+    trip.userId === user.id
+      ? {
+          userId: user.id,
+          email: user.email ?? "",
+          fullName:
+            typeof userMetadata.full_name === "string"
+              ? userMetadata.full_name
+              : null,
+          username:
+            typeof userMetadata.username === "string"
+              ? userMetadata.username
+              : null,
+        }
+      : await getUserProfileByUserId(trip.userId);
+  const plainTrip = toTripPlain(trip);
 
   return (
     <PlannerView
@@ -52,6 +68,7 @@ export default async function TripPlannerPage({
           : null,
         dayCount: item._count.days,
       }))}
+      initialFuelPrices={fuelPrices}
       currentUserId={user.id}
       currentUserFullName={
         typeof userMetadata.full_name === "string"
