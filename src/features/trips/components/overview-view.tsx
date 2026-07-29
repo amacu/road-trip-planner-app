@@ -26,7 +26,6 @@ import {
   removeTripMemberAction,
   updateTripMemberRoleAction,
 } from "@/features/trips/actions";
-import { ExportTripCard } from "@/features/trips/components/export-trip-dialog";
 import { TripSettingsPanel } from "@/features/trips/components/trip-settings-view";
 import type {
   TripPlain,
@@ -47,7 +46,6 @@ export function OverviewView({
   vehicles,
   tripTotalKm,
   tripTotalMin,
-  tripFuelPln,
   fuelPlan,
   fuelVehicle,
   onSaveTrip,
@@ -60,7 +58,6 @@ export function OverviewView({
   vehicles: VehiclePlain[];
   tripTotalKm: number;
   tripTotalMin: number;
-  tripFuelPln: number;
   fuelPlan: FuelPlan | null;
   fuelVehicle: VehiclePlain | null;
   onSaveTrip: (patch: TripUpdateInput) => Promise<void>;
@@ -156,15 +153,6 @@ export function OverviewView({
 
         <div className="mt-4">
           <TeamCard trip={trip} currentUserId={currentUserId} people={people} />
-        </div>
-
-        <div className="mt-4">
-          <ExportTripCard
-            trip={trip}
-            totalKm={tripTotalKm}
-            totalMin={tripTotalMin}
-            fuelPln={tripFuelPln}
-          />
         </div>
       </div>
 

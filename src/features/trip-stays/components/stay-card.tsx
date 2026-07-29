@@ -54,56 +54,57 @@ export function StayCard({
   onDelete: () => Promise<void>;
 }) {
   const [open, setOpen] = useState(false);
+  const stayOption = stay
+    ? STAY_OPTIONS.find(([value]) => value === stay.stayType)
+    : undefined;
+  const StayIcon = stayOption?.[2] ?? BedDouble;
 
   return (
-    <div className="mt-3 space-y-2">
+    <div className="space-y-2">
       {stay ? (
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="group w-full rounded-[15px] border border-[#C9D9DF] bg-[#EEF3F5] p-[14px] text-left transition hover:border-[#9DB8C5] hover:bg-[#E8F0F3]"
+          className="group relative w-full overflow-hidden rounded-[18px] border border-[#CDD3CF] bg-[#EDEFEA] px-3.5 py-3 text-left shadow-[0_5px_16px_rgba(22,19,13,0.04)] transition-all duration-200 hover:-translate-y-px hover:border-[#9FADAE] hover:bg-[#E8ECE7] hover:shadow-[0_10px_24px_rgba(48,69,77,0.1)]"
         >
-          <div className="flex items-start gap-3">
-            <div className="grid size-9 shrink-0 place-items-center rounded-[10px] bg-[#6E9BC0] text-white">
-              {stay.stayType === "driving_overnight" ? (
-                <CarFront className="size-4" />
-              ) : (
-                <BedDouble className="size-4" />
-              )}
-            </div>
+          <span className="absolute inset-y-3 left-0 w-[3px] rounded-r-full bg-[#5E86A3]" />
+          <div className="flex items-center gap-3">
+            <span className="ml-5 grid size-9 shrink-0 place-items-center rounded-full bg-[#526F7D] text-[#F7FAF8] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.14)]">
+              <StayIcon className="size-4" />
+            </span>
             <div className="min-w-0 flex-1">
-              <div className="truncate text-[15.5px] font-bold leading-tight text-[#16130D]">
+              <div className="flex min-w-0 items-center gap-1.5">
+                <span className="rounded-full bg-[#DDE6E6] px-1.5 py-0.5 text-[8px] font-black uppercase tracking-[0.1em] text-[#496775]">
+                  Night
+                </span>
+                <span className="truncate text-[10px] font-bold text-[#71858B]">
+                  {LABELS[stay.stayType]}
+                  {arrivalTime && stay.stayType !== "driving_overnight"
+                    ? ` · Arrives ${arrivalTime}`
+                    : ""}
+                </span>
+              </div>
+              <div className="mt-1.5 truncate text-[15px] font-black leading-tight text-[#16130D]">
                 {stay.name}
               </div>
-              <div className="mt-0.5 truncate text-[12.5px] text-[#948b76]">
+              <div className="mt-1 truncate text-[11.5px] font-medium text-[#7C8581]">
                 {stay.stayType === "driving_overnight"
                   ? "Continue to the next day without stopping"
                   : stay.address || LABELS[stay.stayType]}
               </div>
-              {(arrivalTime || stay.checkOutTime) &&
-                stay.stayType !== "driving_overnight" && (
-                  <div className="mt-[9px] flex flex-wrap gap-1.5">
-                    {arrivalTime && (
-                      <span className="inline-flex items-center gap-[5px] rounded-full border border-[#D5E1E5] bg-white/70 px-[9px] py-[3px] text-[11px] font-semibold text-[#5E7D90]">
-                        <span className="size-[5px] rounded-full bg-[#6E9BC0]" />
-                        Arrives {arrivalTime}
-                      </span>
-                    )}
-                    {stay.checkOutTime && (
-                      <span className="inline-flex items-center gap-[5px] rounded-full border border-[#D5E1E5] bg-white/70 px-[9px] py-[3px] text-[11px] font-semibold text-[#5E7D90]">
-                        Check-out {stay.checkOutTime}
-                      </span>
-                    )}
-                  </div>
-                )}
+              {stay.checkOutTime && stay.stayType !== "driving_overnight" && (
+                <div className="mt-2 font-mono text-[10.5px] font-bold text-[#71858B]">
+                  Check-out {stay.checkOutTime}
+                </div>
+              )}
             </div>
-            <div className="flex shrink-0 items-center gap-2">
+            <div className="flex shrink-0 flex-col items-end gap-1">
               {stay.price != null && (
-                <span className="font-mono text-xs font-bold text-[#5E7D90]">
+                <span className="font-mono text-[11px] font-bold text-[#526F7D]">
                   {stay.price} {stay.currency}
                 </span>
               )}
-              <span className="grid size-7 place-items-center rounded-md text-[#948b76] opacity-0 transition group-hover:bg-[#F3EFE4] group-hover:opacity-100">
+              <span className="grid size-7 place-items-center rounded-[8px] text-[#71858B] opacity-100 transition-all group-hover:bg-[#DEE6E4] md:opacity-0 md:group-hover:opacity-100">
                 <Pencil className="size-3.5" />
               </span>
             </div>
@@ -113,20 +114,21 @@ export function StayCard({
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="group flex w-full items-center gap-3 rounded-[15px] border border-[#C9D9DF] bg-[#E8F0F3] p-[14px] text-left transition hover:border-[#9DB8C5] hover:bg-[#DFEAEE]"
+          className="group relative flex w-full items-center gap-3 overflow-hidden rounded-[18px] border border-dashed border-[#B7C4C2] bg-[#EDEFEA] px-3.5 py-3 text-left shadow-[0_5px_16px_rgba(22,19,13,0.03)] transition-all hover:border-[#819A9E] hover:bg-[#E8ECE7]"
         >
-          <span className="grid size-9 shrink-0 place-items-center rounded-[10px] bg-[#6E9BC0] text-white">
+          <span className="absolute inset-y-3 left-0 w-[3px] rounded-r-full bg-[#7C98A5]" />
+          <span className="ml-5 grid size-9 shrink-0 place-items-center rounded-full bg-[#526F7D] text-[#F7FAF8]">
             <Moon className="size-4" />
           </span>
           <span className="min-w-0 flex-1">
-            <span className="block text-[15px] font-bold leading-tight text-[#263F4C]">
+            <span className="block text-[15px] font-black leading-tight text-[#263F4C]">
               Plan the night
             </span>
-            <span className="mt-0.5 block text-[12.5px] text-[#6F8793]">
+            <span className="mt-1 block text-[11.5px] font-medium text-[#71858B]">
               Hotel, tent, car or drive overnight
             </span>
           </span>
-          <span className="grid size-7 place-items-center rounded-full bg-white text-[#5E86A3] shadow-sm transition group-hover:scale-105">
+          <span className="grid size-7 place-items-center rounded-full bg-[#DEE6E4] text-[#526F7D] transition group-hover:scale-105">
             <Plus className="size-4" />
           </span>
         </button>
@@ -156,8 +158,9 @@ export function PreviousStayBanner({
   onSetDepartureTime?: (departureTime: string) => void;
 }) {
   return (
-    <div className="mb-2 flex items-start gap-3 rounded-[15px] border border-[#C9D9DF] bg-[#EEF3F5] p-[14px]">
-      <span className="grid size-9 shrink-0 place-items-center rounded-[10px] bg-[#6E9BC0] text-white">
+    <div className="relative flex items-center gap-3 overflow-hidden rounded-[18px] border border-[#CDD3CF] bg-[#EDEFEA] px-3.5 py-3 shadow-[0_5px_16px_rgba(22,19,13,0.04)]">
+      <span className="absolute inset-y-3 left-0 w-[3px] rounded-r-full bg-[#5E86A3]" />
+      <span className="grid size-9 shrink-0 place-items-center rounded-full bg-[#526F7D] text-[#F7FAF8]">
         {stay.stayType === "driving_overnight" ? (
           <Route className="size-4" />
         ) : (

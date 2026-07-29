@@ -32,7 +32,7 @@ const tripStayBaseSchema = z.object({
   currency: z.string().trim().length(3).toUpperCase().default("PLN"),
   bookingUrl: z.string().trim().url().nullable().optional().or(z.literal("")),
   confirmation: z.string().trim().max(120).nullable().optional(),
-  notes: z.string().trim().max(1000).nullable().optional(),
+  notes: z.string().trim().max(6000).nullable().optional(),
 });
 
 export const tripStaySchema = tripStayBaseSchema;

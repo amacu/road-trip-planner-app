@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { tripAccessWhere, tripWriteAccessWhere } from "@/lib/db/trip-access";
 import { reorderWithOffset } from "@/lib/db/utils";
 import { prisma } from "@/lib/prisma";
+import type { AiDayStopsImportInput } from "@/lib/validators/trip-stop";
 
 export type TripStopCreateData = {
   stopOrder?: number;
@@ -29,20 +30,6 @@ export async function getTripStops(dayId: string, userId: string) {
   return prisma.tripStop.findMany({
     where: { tripDayId: dayId, trip: tripAccessWhere(userId) },
     orderBy: { stopOrder: "asc" },
-  });
-}
-
-export async function getUnassignedTripStops(tripId: string, userId: string) {
-  return prisma.tripStop.findMany({
-    where: {
-      tripId,
-      tripDayId: null,
-      trip: tripAccessWhere(userId),
-    },
-    orderBy: { stopOrder: "asc" },
-    include: {
-      activities: { orderBy: { activityOrder: "asc" } },
-    },
   });
 }
 
@@ -102,101 +89,64 @@ export async function createTripStop(
   });
 }
 
-export async function createUnassignedTripStop(
-  tripId: string,
+export async function importTripDayStops(
+  dayId: string,
   userId: string,
-  data: TripStopCreateData,
+  input: AiDayStopsImportInput,
 ) {
-  const trip = await prisma.trip.findFirst({
-    where: { id: tripId, ...tripWriteAccessWhere(userId) },
-    select: { id: true },
-  });
-  if (!trip) return null;
-
   return prisma.$transaction(async (tx) => {
-    // Lock the trip row so concurrent inserts for its unassigned bucket
-    // serialize instead of racing on the same computed stopOrder.
-    await tx.$executeRaw`SELECT id FROM trips WHERE id = ${tripId}::uuid FOR UPDATE`;
+    const day = await tx.tripDay.findFirst({
+      where: { id: dayId, trip: tripWriteAccessWhere(userId) },
+      select: { id: true, tripId: true },
+    });
+    if (!day) return null;
 
-    const stopOrder =
-      data.stopOrder ??
-      ((
-        await tx.tripStop.aggregate({
-          where: { tripId, tripDayId: null },
-          _max: { stopOrder: true },
-        })
-      )._max.stopOrder ?? 0) + 1;
+    await tx.$executeRaw`SELECT id FROM trip_days WHERE id = ${dayId}::uuid FOR UPDATE`;
 
-    return tx.tripStop.create({
+    await tx.tripDay.update({
+      where: { id: dayId },
       data: {
-        tripId,
-        tripDayId: null,
-        stopOrder,
-        name: data.name.trim(),
-        address: data.address?.trim() || null,
-        latitude:
-          data.latitude === null || data.latitude === undefined
-            ? null
-            : new Prisma.Decimal(data.latitude),
-        longitude:
-          data.longitude === null || data.longitude === undefined
-            ? null
-            : new Prisma.Decimal(data.longitude),
-        googleMapsUrl: data.googleMapsUrl?.trim() || null,
-        placeId: data.placeId?.trim() || null,
-        countryCode: data.countryCode?.trim().toUpperCase() || null,
-        stopType: data.stopType ?? "stop",
-        travelMode: data.travelMode ?? "driving",
-        startTime: data.startTime || null,
-        endTime: data.endTime || null,
-        category: data.category?.trim() || null,
-        description: data.description?.trim() || null,
-        visitDurationMin: data.visitDurationMin ?? null,
-        notes: data.notes?.trim() || null,
+        notes: input.dayNotesMarkdown || null,
+        startTime: input.dayStartTime,
       },
     });
-  });
-}
 
-export async function moveTripStopToDay(
-  stopId: string,
-  userId: string,
-  targetDayId: string,
-) {
-  const [stop, targetDay] = await Promise.all([
-    prisma.tripStop.findFirst({
-      where: { id: stopId, trip: tripWriteAccessWhere(userId) },
-      select: { id: true, tripId: true },
-    }),
-    prisma.tripDay.findFirst({
-      where: { id: targetDayId, trip: tripWriteAccessWhere(userId) },
-      select: { id: true, tripId: true },
-    }),
-  ]);
-  if (!stop || !targetDay || stop.tripId !== targetDay.tripId) return null;
+    if (input.replaceExisting) {
+      await tx.tripStop.deleteMany({ where: { tripDayId: dayId } });
+    }
 
-  return prisma.$transaction(async (tx) => {
-    // Lock the target day row so concurrent moves into it serialize
-    // instead of racing on the same computed stopOrder.
-    await tx.$executeRaw`SELECT id FROM trip_days WHERE id = ${targetDayId}::uuid FOR UPDATE`;
+    const firstOrder = input.replaceExisting
+      ? 1
+      : ((
+          await tx.tripStop.aggregate({
+            where: { tripDayId: dayId },
+            _max: { stopOrder: true },
+          })
+        )._max.stopOrder ?? 0) + 1;
+    const ids: string[] = [];
 
-    const stopOrder =
-      ((
-        await tx.tripStop.aggregate({
-          where: { tripDayId: targetDayId },
-          _max: { stopOrder: true },
-        })
-      )._max.stopOrder ?? 0) + 1;
+    for (const [index, item] of input.items.entries()) {
+      const stop = await tx.tripStop.create({
+        data: {
+          tripId: day.tripId,
+          tripDayId: dayId,
+          stopOrder: firstOrder + index,
+          name: item.name,
+          address: item.address || null,
+          latitude: new Prisma.Decimal(item.latitude),
+          longitude: new Prisma.Decimal(item.longitude),
+          countryCode: item.countryCode,
+          stopType: item.itemType,
+          travelMode: item.travelMode,
+          description: item.description || null,
+          visitDurationMin: item.visitDurationMin,
+        },
+        select: { id: true },
+      });
+      ids.push(stop.id);
+    }
 
-    await tx.tripActivity.updateMany({
-      where: { tripStopId: stopId },
-      data: { tripDayId: targetDayId },
-    });
-
-    return tx.tripStop.update({
-      where: { id: stopId },
-      data: { tripDayId: targetDayId, stopOrder },
-    });
+    return ids;
   });
 }
 

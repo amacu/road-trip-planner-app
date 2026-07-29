@@ -1,13 +1,11 @@
 "use client";
 
-import { useSortable } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
 import {
   Camera,
   ChevronDown,
+  ChevronUp,
   Clock,
   Coffee,
-  GripVertical,
   Landmark,
   MapPin,
   Mountain,
@@ -66,6 +64,8 @@ export function StopCard({
   onUpdateActivity: _onUpdateActivity,
   onRemoveActivity: _onRemoveActivity,
   onReorderActivities: _onReorderActivities,
+  onMoveUp,
+  onMoveDown,
   onSelect,
 }: {
   index: number;
@@ -76,7 +76,7 @@ export function StopCard({
   departureTime?: string | null;
   dayStartTime?: string;
   onSetDayStartTime?: (startTime: string) => void;
-  /** Hides the arrival/departure time badge — for contexts with no day schedule (e.g. the unassigned-stops bucket). */
+  /** Hides the arrival/departure time badge when the schedule is unavailable. */
   showSchedule?: boolean;
   /** Extra control rendered next to the expand/remove buttons, e.g. "Move to day". */
   headerAction?: React.ReactNode;
@@ -89,19 +89,11 @@ export function StopCard({
   ) => void;
   onRemoveActivity: (activityId: string) => void;
   onReorderActivities: (orderedActivityIds: string[]) => void;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
   /** Called when this stop is expanded (selected) — lets the map recenter on it and show its activities. */
   onSelect?: () => void;
 }) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({
-    id: stop.id,
-  });
   const [expanded, setExpanded] = useState(false);
 
   function toggleExpanded() {
@@ -110,95 +102,139 @@ export function StopCard({
     if (next) onSelect?.();
   }
 
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.6 : 1,
-  };
-
   const isActivity = stop.itemType === "activity";
   const markerColor = isActivity ? "#7C5CBF" : isFirst ? "#16130D" : "#E4562A";
+  const scheduleLabel = !showSchedule
+    ? null
+    : isFirst
+      ? departureTime
+        ? `Departs ${departureTime}`
+        : "Set start time"
+      : isLast
+        ? arrivalTime
+          ? `Arrives ${arrivalTime}`
+          : "Set start time"
+        : arrivalTime
+          ? `${arrivalTime}${departureTime ? ` – ${departureTime}` : ""}`
+          : "Set start time";
+  const scheduleIsSet = Boolean(
+    isFirst ? departureTime : isLast ? arrivalTime : arrivalTime,
+  );
 
   return (
-    <li ref={setNodeRef} style={style} className="group relative">
+    <li className="group relative">
       <div
         className={cn(
-          "flex flex-col rounded-[15px] border p-[14px]",
+          "relative flex flex-col overflow-hidden rounded-[18px] border px-3.5 py-3 shadow-[0_5px_16px_rgba(22,19,13,0.04)] transition-all duration-200",
           isActivity
-            ? "border-violet-200 bg-violet-50/70"
-            : "border-[#EFE8D8] bg-white",
+            ? expanded
+              ? "border-[#A88DDA] bg-[#F0ECF6] shadow-[0_10px_24px_rgba(124,92,191,0.12)]"
+              : "border-[#D8CDE8] bg-[#F3EFF8] hover:border-[#BCA9DF] hover:bg-[#F0ECF6] hover:shadow-[0_9px_22px_rgba(124,92,191,0.1)]"
+            : expanded
+              ? "border-brand/50 bg-[#F8F1E6] shadow-[0_10px_24px_rgba(228,86,42,0.1)]"
+              : "border-[#DED3C0] bg-[#F8F4EC] hover:border-[#CDBFA6] hover:bg-[#FAF6EE] hover:shadow-[0_9px_22px_rgba(22,19,13,0.08)]",
         )}
       >
-        <div className="flex items-start gap-3">
-          <div
-            {...attributes}
-            {...listeners}
-            className="grid size-9 shrink-0 cursor-grab place-items-center rounded-[10px] font-mono text-sm font-bold text-white active:cursor-grabbing"
-            style={{ background: markerColor }}
-          >
-            {isActivity ? <Camera className="size-4" /> : index + 1}
+        <span
+          aria-hidden
+          className={cn(
+            "absolute inset-y-3 left-0 w-[3px] rounded-r-full",
+            isActivity ? "bg-[#7C5CBF]" : "bg-brand",
+          )}
+        />
+
+        <div className="flex items-center gap-2.5">
+          <div className="flex shrink-0 items-center gap-1.5">
+            <div className="flex flex-col gap-px">
+              <button
+                type="button"
+                disabled={isFirst}
+                onClick={onMoveUp}
+                className="grid size-4 place-items-center rounded-[5px] text-[#A89F88] opacity-65 transition-all hover:bg-muted hover:text-foreground hover:opacity-100 disabled:cursor-default disabled:opacity-15"
+                title="Move item up"
+                aria-label={`Move ${stop.name} up`}
+              >
+                <ChevronUp className="size-3" />
+              </button>
+              <span
+                className={cn(
+                  "mx-auto size-1.5 rounded-full",
+                  isActivity ? "bg-[#7C5CBF]" : "bg-brand",
+                )}
+              />
+              <button
+                type="button"
+                disabled={isLast}
+                onClick={onMoveDown}
+                className="grid size-4 place-items-center rounded-[5px] text-[#A89F88] opacity-65 transition-all hover:bg-muted hover:text-foreground hover:opacity-100 disabled:cursor-default disabled:opacity-15"
+                title="Move item down"
+                aria-label={`Move ${stop.name} down`}
+              >
+                <ChevronDown className="size-3" />
+              </button>
+            </div>
+            <div
+              className="grid size-8 place-items-center rounded-full font-mono text-[12px] font-black text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.16)]"
+              style={{ background: markerColor }}
+            >
+              {index + 1}
+            </div>
           </div>
 
           <div className="flex min-w-0 flex-1 items-start justify-between gap-2">
             <button
+              type="button"
               onClick={toggleExpanded}
               className="min-w-0 flex-1 text-left"
             >
-              <span className="flex min-w-0 items-center gap-2">
-                <span className="truncate text-[15.5px] font-bold leading-tight text-[#16130D]">
-                  {stop.name}
+              <span className="flex min-w-0 items-center gap-1.5">
+                <span
+                  className={cn(
+                    "shrink-0 rounded-full px-1.5 py-0.5 text-[8px] font-black uppercase tracking-[0.1em]",
+                    isActivity
+                      ? "bg-[#F0EAFB] text-[#6C4FA8]"
+                      : "bg-[#FBE7DD] text-[#B8431F]",
+                  )}
+                >
+                  {isActivity ? "Activity" : "Stop"}
                 </span>
+                {scheduleLabel && (
+                  <span
+                    className={cn(
+                      "inline-flex min-w-0 items-center gap-1 truncate text-[10px] font-bold",
+                      scheduleIsSet ? "text-[#6E756B]" : "text-[#A89F88]",
+                    )}
+                  >
+                    {scheduleIsSet ? (
+                      <span
+                        className={cn(
+                          "size-1.5 shrink-0 rounded-full",
+                          isActivity ? "bg-[#7C5CBF]" : "bg-brand",
+                        )}
+                      />
+                    ) : (
+                      <Clock className="size-3 shrink-0" />
+                    )}
+                    {scheduleLabel}
+                  </span>
+                )}
               </span>
-              <span className="mt-0.5 block truncate text-[12.5px] text-[#948b76]">
+              <span className="mt-1.5 block truncate text-[15px] font-black leading-tight text-[#16130D]">
+                {stop.name}
+              </span>
+              <span className="mt-1 block truncate text-[11.5px] font-medium text-[#948B76]">
                 {stop.address || "No address"}
               </span>
-              {showSchedule && (
-                <span className="mt-[9px] inline-flex items-center gap-[5px] rounded-full border border-[#EFE8D8] bg-[#F3EFE4] px-[9px] py-[3px] text-[11px] font-semibold text-[#7a7264]">
-                  {isFirst ? (
-                    departureTime ? (
-                      <>
-                        <span className="size-[5px] rounded-full bg-[#E4562A]" />
-                        Departs {departureTime}
-                      </>
-                    ) : (
-                      <>
-                        <Clock className="size-3" />
-                        Set the day&apos;s start time
-                      </>
-                    )
-                  ) : isLast ? (
-                    arrivalTime ? (
-                      <>
-                        <span className="size-[5px] rounded-full bg-[#E4562A]" />
-                        Arrives {arrivalTime}
-                      </>
-                    ) : (
-                      <>
-                        <Clock className="size-3" />
-                        Set the day&apos;s start time
-                      </>
-                    )
-                  ) : arrivalTime ? (
-                    <>
-                      <span className="size-[5px] rounded-full bg-[#E4562A]" />
-                      {arrivalTime}
-                      {departureTime ? ` – ${departureTime}` : ""}
-                    </>
-                  ) : (
-                    <>
-                      <Clock className="size-3" />
-                      Set the day&apos;s start time
-                    </>
-                  )}
-                </span>
-              )}
             </button>
 
-            <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+            <div className="flex shrink-0 items-center gap-0.5">
               {headerAction}
               <button
+                type="button"
                 onClick={toggleExpanded}
-                className="grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-muted"
+                className="grid size-7 place-items-center rounded-[8px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                title={expanded ? "Collapse item" : "Expand item"}
+                aria-label={expanded ? "Collapse item" : "Expand item"}
               >
                 <ChevronDown
                   className={cn(
@@ -208,8 +244,11 @@ export function StopCard({
                 />
               </button>
               <button
+                type="button"
                 onClick={onRemove}
-                className="grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-muted hover:text-destructive"
+                className="grid size-7 place-items-center rounded-[8px] text-[#BB6A4F] opacity-100 transition-all hover:bg-[#FBE7DD] hover:text-destructive focus:opacity-100 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100"
+                title={`Delete ${stop.name}`}
+                aria-label={`Delete ${stop.name}`}
               >
                 <Trash2 className="size-4" />
               </button>
@@ -218,7 +257,12 @@ export function StopCard({
         </div>
 
         {expanded && (
-          <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1.5 border-t border-border pt-3 font-mono text-xs font-semibold text-[#16130D]">
+          <div
+            className={cn(
+              "mt-3 flex flex-wrap items-center gap-x-2 gap-y-1.5 rounded-[11px] px-3 py-2.5 font-mono text-xs font-semibold text-[#16130D]",
+              isActivity ? "bg-[#EAE4F2]" : "bg-[#EEE7DA]",
+            )}
+          >
             {isFirst && onSetDayStartTime ? (
               <span className="flex items-center gap-1.5">
                 <span className="font-sans font-normal text-[#a89f88]">
@@ -387,7 +431,6 @@ function ActivityRow({
           >
             <ChevronDown className="size-3 rotate-180" />
           </button>
-          <GripVertical className="size-4 text-muted-foreground" />
           <button
             onClick={onMoveDown}
             disabled={isLast}

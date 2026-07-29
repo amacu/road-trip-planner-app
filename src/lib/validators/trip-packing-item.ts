@@ -70,7 +70,22 @@ export type PackingCategory = z.infer<typeof packingCategorySchema>;
 export const productLinkSchema = z.object({
   id: z.string().trim().min(1).max(100),
   label: z.string().trim().min(1).max(80),
-  url: z.string().trim().url("Enter a valid product URL.").max(2_000),
+  url: z
+    .string()
+    .trim()
+    .url("Enter a valid product URL.")
+    .max(2_000)
+    .refine(
+      (value) => {
+        try {
+          const protocol = new URL(value).protocol;
+          return protocol === "http:" || protocol === "https:";
+        } catch {
+          return false;
+        }
+      },
+      { message: "Enter a valid product URL." },
+    ),
 });
 
 export const productLinksSchema = z.array(productLinkSchema).max(20);

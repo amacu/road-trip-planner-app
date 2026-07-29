@@ -21,7 +21,7 @@ export const tripDayCreateSchema = z.object({
 });
 
 export const tripDayUpdateSchema = tripDayCreateSchema.partial().extend({
-  notes: z.string().trim().max(2000).optional().or(z.literal("")),
+  notes: z.string().trim().max(6000).optional().or(z.literal("")),
 });
 
 export const reorderTripDaysSchema = z.object({

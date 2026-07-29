@@ -17,13 +17,6 @@ const _tripWithRelationsArgs = {
         },
       },
     },
-    stops: {
-      where: { tripDayId: null },
-      orderBy: { stopOrder: "asc" },
-      include: {
-        activities: { orderBy: { activityOrder: "asc" } },
-      },
-    },
   },
 } satisfies Prisma.TripDefaultArgs;
 
@@ -32,4 +25,3 @@ export type TripWithRelations = Prisma.TripGetPayload<
 >;
 export type TripDayWithStops = TripWithRelations["days"][number];
 export type TripStopRecord = TripDayWithStops["stops"][number];
-export type UnassignedTripStopRecord = TripWithRelations["stops"][number];

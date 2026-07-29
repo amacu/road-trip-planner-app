@@ -133,15 +133,6 @@ export function buildTripExportPrompt(
     }
   });
 
-  if (trip.unassignedStops.length > 0) {
-    lines.push("", "## Unassigned stops (not yet scheduled into a day)");
-    trip.unassignedStops.forEach((stop, index) => {
-      const parts = [`${index + 1}. ${stop.name}`];
-      if (stop.address) parts.push(`(${stop.address})`);
-      lines.push(`- ${parts.join(" ")}`);
-    });
-  }
-
   lines.push(
     "",
     "---",

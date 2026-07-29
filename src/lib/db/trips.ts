@@ -31,13 +31,6 @@ const tripInclude = {
       },
     },
   },
-  stops: {
-    where: { tripDayId: null },
-    orderBy: { stopOrder: "asc" },
-    include: {
-      activities: { orderBy: { activityOrder: "asc" } },
-    },
-  },
 } satisfies Prisma.TripInclude;
 
 export async function getTrips(userId: string) {

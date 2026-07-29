@@ -66,11 +66,15 @@ const POI_STYLES: Record<
 
 type Props = {
   stops: StopPoint[];
+  /** Stable identity of the route currently shown (for example a day id). Changing it re-fits the camera without reacting to ordinary stop edits. */
+  viewportKey?: string;
   activeStopId?: string;
   onStopMove?: (id: string, lat: number, lng: number) => void;
   /** Optional per-stop marker color (e.g. one color per day) keyed by stop id, overriding the default active/inactive coloring. */
   stopColors?: Record<string, string>;
-  /** Stop ids to exclude from the connecting route line (still shown as markers) — e.g. unassigned stops with no day/order to route through. */
+  /** Optional marker text keyed by stop id, used to keep map numbering aligned with the route list. */
+  markerLabels?: Record<string, string>;
+  /** Stop ids to exclude from the connecting route line while keeping their markers visible. */
   excludeFromRouteIds?: ReadonlySet<string>;
   /** Extra pins shown alongside stops — e.g. the active stop's activities. Only drawn while activeStopId is set. */
   activityPins?: MapActivityPin[];
@@ -84,9 +88,11 @@ type Props = {
 
 export function MapView({
   stops,
+  viewportKey,
   activeStopId,
   onStopMove,
   stopColors,
+  markerLabels,
   excludeFromRouteIds,
   activityPins,
   showPois,
@@ -112,14 +118,17 @@ export function MapView({
   const stopsRef = useRef(stops);
   const activeStopIdRef = useRef(activeStopId);
   const stopColorsRef = useRef(stopColors);
+  const markerLabelsRef = useRef(markerLabels);
   const excludeFromRouteIdsRef = useRef(excludeFromRouteIds);
   const nonDraggableIdsRef = useRef(nonDraggableIds);
   const activityPinsRef = useRef(activityPins);
   const showPoisRef = useRef(showPois);
+  const viewportKeyRef = useRef(viewportKey);
   // Tracks the activeStopId that was in effect the last time we moved the
   // viewport, so we only re-fit/refocus when the *selection* changes — not
   // on every unrelated re-render (e.g. a stop's name being edited).
   const lastFocusedStopIdRef = useRef<string | undefined>(undefined);
+  const lastViewportKeyRef = useRef<string | undefined>(undefined);
   const hasFittedOnceRef = useRef(false);
 
   useEffect(() => {
@@ -144,15 +153,19 @@ export function MapView({
 
   useEffect(() => {
     stopsRef.current = stops;
+    viewportKeyRef.current = viewportKey;
     activeStopIdRef.current = activeStopId;
     stopColorsRef.current = stopColors;
+    markerLabelsRef.current = markerLabels;
     excludeFromRouteIdsRef.current = excludeFromRouteIds;
     nonDraggableIdsRef.current = nonDraggableIds;
     activityPinsRef.current = activityPins;
   }, [
     stops,
+    viewportKey,
     activeStopId,
     stopColors,
+    markerLabels,
     excludeFromRouteIds,
     nonDraggableIds,
     activityPins,
@@ -164,8 +177,10 @@ export function MapView({
     if (!L || !map) return;
 
     const currentStops = stopsRef.current;
+    const currentViewportKey = viewportKeyRef.current;
     const currentActiveStopId = activeStopIdRef.current;
     const currentStopColors = stopColorsRef.current;
+    const currentMarkerLabels = markerLabelsRef.current;
     const currentExcludeFromRouteIds = excludeFromRouteIdsRef.current;
     const routeStops = currentExcludeFromRouteIds
       ? currentStops.filter((stop) => !currentExcludeFromRouteIds.has(stop.id))
@@ -189,8 +204,12 @@ export function MapView({
         ).length;
       const isActive = stop.id === currentActiveStopId;
       const markerColor =
-        (isActivity ? "#7C5CBF" : currentStopColors?.[stop.id]) ??
-        (isActive ? "var(--color-brand)" : "#16130D");
+        isStay || isOvernightEnd
+          ? "#526F7D"
+          : ((isActivity ? "#7C5CBF" : currentStopColors?.[stop.id]) ??
+            (isActive ? "var(--color-brand)" : "#16130D"));
+      const markerLabel =
+        currentMarkerLabels?.[stop.id] ?? (isActivity ? "★" : `${stopNumber}`);
       const icon = L.divIcon({
         className: "",
         html: `<div style="
@@ -204,7 +223,7 @@ export function MapView({
           display:flex;align-items:center;justify-content:center;
           font-weight:700;font-size:12px;
           font-family: 'JetBrains Mono', ui-monospace, monospace;
-        "><span style="transform: rotate(45deg)">${isStay ? "☾" : isOvernightEnd ? "→" : isActivity ? "★" : stopNumber}</span></div>`,
+        "><span style="transform: rotate(45deg)">${isStay ? "☾" : isOvernightEnd ? "→" : escapeHtml(markerLabel)}</span></div>`,
         iconSize: [30, 30],
         iconAnchor: [15, 30],
       });
@@ -215,7 +234,7 @@ export function MapView({
       })
         .addTo(map)
         .bindTooltip(
-          `${isStay ? "Overnight · " : isOvernightEnd || isActivity ? "" : `${stopNumber}. `}${escapeHtml(stop.name)}`,
+          `${isStay ? "Overnight · " : isOvernightEnd ? "" : `${escapeHtml(markerLabel)}. `}${escapeHtml(stop.name)}`,
           {
             direction: "top",
             offset: [0, -28],
@@ -266,10 +285,13 @@ export function MapView({
     const selectionChanged =
       lastFocusedStopIdRef.current !== currentActiveStopId;
     lastFocusedStopIdRef.current = currentActiveStopId;
+    const viewportChanged = lastViewportKeyRef.current !== currentViewportKey;
+    lastViewportKeyRef.current = currentViewportKey;
 
     const activeStop = currentStops.find((s) => s.id === currentActiveStopId);
 
-    const shouldFit = selectionChanged || !hasFittedOnceRef.current;
+    const shouldFit =
+      viewportChanged || selectionChanged || !hasFittedOnceRef.current;
     hasFittedOnceRef.current = true;
 
     if (shouldFit && activeStop) {
@@ -285,11 +307,21 @@ export function MapView({
       } else {
         map.setView([activeStop.lat, activeStop.lng], 15, { animate: false });
       }
-    } else if (shouldFit && currentStops.length > 0) {
+    } else if (shouldFit && currentStops.length === 1) {
+      map.setView([currentStops[0].lat, currentStops[0].lng], 14, {
+        animate: false,
+      });
+    } else if (shouldFit && currentStops.length > 1) {
       const bounds = L.latLngBounds(
         currentStops.map((s) => [s.lat, s.lng] as [number, number]),
       );
-      map.fitBounds(bounds, { padding: [60, 60], maxZoom: 13 });
+      map.fitBounds(bounds, {
+        paddingTopLeft: [56, 92],
+        paddingBottomRight: [56, 112],
+        maxZoom: 14,
+        animate: true,
+        duration: 0.45,
+      });
     }
 
     lineRef.current?.remove();
@@ -541,7 +573,15 @@ export function MapView({
 
   useEffect(() => {
     drawMarkersAndRoute();
-  }, [stops, activeStopId, stopColors, excludeFromRouteIds, activityPins]);
+  }, [
+    stops,
+    viewportKey,
+    activeStopId,
+    stopColors,
+    markerLabels,
+    excludeFromRouteIds,
+    activityPins,
+  ]);
 
   return (
     <div className="relative h-full w-full">

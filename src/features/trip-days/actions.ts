@@ -23,7 +23,9 @@ import {
 export async function createTripDayAction(
   tripId: string,
   input: unknown,
-): Promise<ActionResult<TripDaySummaryPlain>> {
+): Promise<
+  ActionResult<TripDaySummaryPlain & { carryOverStopId: string | null }>
+> {
   const user = await requireAuthenticatedUser();
   const parsed = tripDayCreateSchema.safeParse(input);
   if (!parsed.success) {
@@ -33,12 +35,18 @@ export async function createTripDayAction(
     };
   }
 
-  const day = await createTripDay(tripId, user.id, parsed.data);
-  if (!day) {
+  const created = await createTripDay(tripId, user.id, parsed.data);
+  if (!created) {
     return { success: false, error: "Trip not found." };
   }
 
-  return { success: true, data: toTripDaySummaryPlain(day) };
+  return {
+    success: true,
+    data: {
+      ...toTripDaySummaryPlain(created.day),
+      carryOverStopId: created.carryOverStopId,
+    },
+  };
 }
 
 export async function updateTripDayAction(

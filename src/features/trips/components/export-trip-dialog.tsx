@@ -91,7 +91,7 @@ export function ExportTripCard({
   );
 }
 
-function ExportTripDialog({
+export function ExportTripDialog({
   trip,
   totalKm,
   totalMin,

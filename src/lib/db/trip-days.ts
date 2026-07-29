@@ -40,16 +40,35 @@ export async function createTripDay(
     // instead of racing on the same computed dayNumber.
     await tx.$executeRaw`SELECT id FROM trips WHERE id = ${tripId}::uuid FOR UPDATE`;
 
-    const dayNumber =
-      data.dayNumber ??
-      ((
-        await tx.tripDay.aggregate({
-          where: { tripId },
-          _max: { dayNumber: true },
-        })
-      )._max.dayNumber ?? 0) + 1;
+    const previousDay = await tx.tripDay.findFirst({
+      where: { tripId },
+      orderBy: { dayNumber: "desc" },
+      select: {
+        dayNumber: true,
+        stayAfter: {
+          select: {
+            stayType: true,
+            latitude: true,
+            longitude: true,
+          },
+        },
+        stops: {
+          orderBy: { stopOrder: "desc" },
+          take: 1,
+        },
+      },
+    });
+    const previousStayDefinesStart =
+      previousDay?.stayAfter?.stayType !== "driving_overnight" &&
+      previousDay?.stayAfter?.latitude != null &&
+      previousDay.stayAfter.longitude != null;
+    const previousLastStop = previousStayDefinesStart
+      ? undefined
+      : previousDay?.stops[0];
 
-    return tx.tripDay.create({
+    const dayNumber = data.dayNumber ?? (previousDay?.dayNumber ?? 0) + 1;
+
+    const day = await tx.tripDay.create({
       data: {
         tripId,
         dayNumber,
@@ -58,12 +77,30 @@ export async function createTripDay(
         notes: data.notes?.trim() || null,
         startTime: data.startTime || null,
       },
-      include: {
-        stops: {
-          orderBy: { stopOrder: "asc" },
-        },
-      },
     });
+
+    const carryOverStop = previousLastStop
+      ? await tx.tripStop.create({
+          data: {
+            tripId,
+            tripDayId: day.id,
+            stopOrder: 1,
+            name: previousLastStop.name,
+            address: previousLastStop.address,
+            latitude: previousLastStop.latitude,
+            longitude: previousLastStop.longitude,
+            countryCode: previousLastStop.countryCode,
+            stopType: "stop",
+            travelMode: "driving",
+          },
+          select: { id: true },
+        })
+      : null;
+
+    return {
+      day,
+      carryOverStopId: carryOverStop?.id ?? null,
+    };
   });
 }
 
@@ -97,11 +134,42 @@ export async function updateTripDay(
 }
 
 export async function deleteTripDay(dayId: string, userId: string) {
-  const result = await prisma.tripDay.deleteMany({
-    where: { id: dayId, trip: tripWriteAccessWhere(userId) },
-  });
+  return prisma.$transaction(async (tx) => {
+    const day = await tx.tripDay.findFirst({
+      where: { id: dayId, trip: tripWriteAccessWhere(userId) },
+      select: { id: true, tripId: true },
+    });
+    if (!day) return false;
 
-  return result.count > 0;
+    await tx.$executeRaw`SELECT id FROM trips WHERE id = ${day.tripId}::uuid FOR UPDATE`;
+
+    const result = await tx.tripDay.deleteMany({
+      where: { id: day.id, tripId: day.tripId },
+    });
+    if (result.count === 0) return false;
+
+    // Move every remaining number outside the unique-key range first, then
+    // compact the sequence back to 1..n. Doing both steps under the trip-row
+    // lock keeps a concurrent create from observing or producing gaps.
+    await tx.$executeRaw`
+      UPDATE trip_days
+      SET day_number = day_number + 1000000
+      WHERE trip_id = ${day.tripId}::uuid
+    `;
+    await tx.$executeRaw`
+      WITH ordered AS (
+        SELECT id, ROW_NUMBER() OVER (ORDER BY day_number, created_at, id)::int AS next_number
+        FROM trip_days
+        WHERE trip_id = ${day.tripId}::uuid
+      )
+      UPDATE trip_days AS day
+      SET day_number = ordered.next_number
+      FROM ordered
+      WHERE day.id = ordered.id
+    `;
+
+    return true;
+  });
 }
 
 /**

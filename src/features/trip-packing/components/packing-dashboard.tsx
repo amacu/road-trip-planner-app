@@ -4,6 +4,8 @@ import {
   Check,
   ChevronDown,
   ChevronUp,
+  Eye,
+  EyeOff,
   ExternalLink,
   Link2,
   PackageCheck,
@@ -11,7 +13,6 @@ import {
   Settings2,
   ShoppingCart,
   Trash2,
-  Undo2,
   X,
 } from "lucide-react";
 import {
@@ -58,6 +59,11 @@ const EMPTY_DRAFT: TripPackingItemInput = {
   isPacked: false,
 };
 
+const SHOPPING_TABLE_GRID =
+  "grid-cols-[40px_minmax(160px,1.25fr)_140px_56px_minmax(120px,.75fr)_108px_76px]";
+const PACKING_TABLE_GRID =
+  "grid-cols-[40px_minmax(180px,1.3fr)_140px_56px_minmax(140px,.8fr)_76px]";
+
 export function PackingDashboard({
   items,
   categories: categoryConfigs,
@@ -71,6 +77,8 @@ export function PackingDashboard({
   const [managingCategories, setManagingCategories] = useState(false);
   const [shoppingCollapsed, setShoppingCollapsed] = useState(false);
   const [packingCollapsed, setPackingCollapsed] = useState(false);
+  const [hidePurchased, setHidePurchased] = useState(false);
+  const [hidePacked, setHidePacked] = useState(false);
   const categoryNames = useMemo(
     () =>
       Array.from(
@@ -83,9 +91,7 @@ export function PackingDashboard({
   );
 
   const shoppingItems = items.filter((item) => item.acquisition === "buy");
-  const packingItems = items.filter(
-    (item) => item.acquisition !== "buy" || item.isPurchased,
-  );
+  const packingItems = items.filter((item) => item.acquisition !== "buy");
   const purchasedCount = items.filter(
     (item) => item.acquisition === "buy" && item.isPurchased,
   ).length;
@@ -107,8 +113,20 @@ export function PackingDashboard({
   const categoryColors = new Map(
     categoryConfigs.map((category) => [category.name, category.color]),
   );
-  const shoppingGroups = groupItemsByCategory(shoppingItems, categoryOrder);
-  const packingGroups = groupItemsByCategory(packingItems, categoryOrder);
+  const visibleShoppingItems = hidePurchased
+    ? shoppingItems.filter((item) => !item.isPurchased)
+    : shoppingItems;
+  const visiblePackingItems = hidePacked
+    ? packingItems.filter((item) => !item.isPacked)
+    : packingItems;
+  const shoppingGroups = groupItemsByCategory(
+    visibleShoppingItems,
+    categoryOrder,
+  );
+  const packingGroups = groupItemsByCategory(
+    visiblePackingItems,
+    categoryOrder,
+  );
 
   function submitDraft(event: FormEvent) {
     event.preventDefault();
@@ -140,6 +158,35 @@ export function PackingDashboard({
   async function removeItem(item: TripPackingItemPlain) {
     const success = await onDelete(item.id);
     if (success) toast.success("Item removed.");
+  }
+
+  async function togglePurchase(item: TripPackingItemPlain) {
+    const nextPurchased = !item.isPurchased;
+    const updated = await onUpdate(item.id, {
+      isPurchased: nextPurchased,
+    });
+    if (!updated) return;
+
+    if (!nextPurchased) {
+      toast.success("Marked as not bought.");
+      return;
+    }
+
+    const copied = await onCreate({
+      name: item.name,
+      category: item.category,
+      acquisition: "have",
+      quantity: item.quantity,
+      notes: item.notes,
+      price: item.price,
+      productLinks: item.productLinks,
+      isPurchased: false,
+      isPacked: false,
+    });
+
+    if (!copied) {
+      await onUpdate(item.id, { isPurchased: false });
+    }
   }
 
   return (
@@ -186,7 +233,13 @@ export function PackingDashboard({
               />
             </div>
             <ProgressBar value={shoppingProgress} />
-            {shoppingItems.length ? (
+            <CompletedItemsToggle
+              hidden={hidePurchased}
+              count={purchasedCount}
+              label="bought"
+              onToggle={() => setHidePurchased((current) => !current)}
+            />
+            {visibleShoppingItems.length ? (
               <>
                 <div className="mt-5 hidden md:block">
                   {shoppingGroups.map(([category, categoryItems]) => {
@@ -215,19 +268,7 @@ export function PackingDashboard({
                             categoryColor={
                               categoryColors.get(item.category) ?? "#6A6353"
                             }
-                            onPurchase={async () => {
-                              const nextPurchased = !item.isPurchased;
-                              const success = await onUpdate(item.id, {
-                                isPurchased: nextPurchased,
-                                isPacked: false,
-                              });
-                              if (success)
-                                toast.success(
-                                  nextPurchased
-                                    ? "Added to packing list."
-                                    : "Removed from packing list.",
-                                );
-                            }}
+                            onPurchase={() => togglePurchase(item)}
                             onUpdate={(input) => onUpdate(item.id, input)}
                             onDelete={() => removeItem(item)}
                           />
@@ -265,19 +306,7 @@ export function PackingDashboard({
                               categoryColor={
                                 categoryColors.get(item.category) ?? "#6A6353"
                               }
-                              onPurchase={async () => {
-                                const nextPurchased = !item.isPurchased;
-                                const success = await onUpdate(item.id, {
-                                  isPurchased: nextPurchased,
-                                  isPacked: false,
-                                });
-                                if (success)
-                                  toast.success(
-                                    nextPurchased
-                                      ? "Added to packing list."
-                                      : "Removed from packing list.",
-                                  );
-                              }}
+                              onPurchase={() => togglePurchase(item)}
                               onUpdate={(input) => onUpdate(item.id, input)}
                               onDelete={() => removeItem(item)}
                             />
@@ -291,8 +320,16 @@ export function PackingDashboard({
             ) : (
               <EmptyList
                 icon={<ShoppingCart className="size-7" />}
-                title="Nothing to buy"
-                description="Add the first item to your shopping list."
+                title={
+                  shoppingItems.length
+                    ? "Bought items hidden"
+                    : "Nothing to buy"
+                }
+                description={
+                  shoppingItems.length
+                    ? "Show bought items to see the complete shopping list."
+                    : "Add the first item to your shopping list."
+                }
               />
             )}
           </>
@@ -336,7 +373,13 @@ export function PackingDashboard({
               />
             </div>
             <ProgressBar value={packingProgress} />
-            {packingItems.length ? (
+            <CompletedItemsToggle
+              hidden={hidePacked}
+              count={packedCount}
+              label="packed"
+              onToggle={() => setHidePacked((current) => !current)}
+            />
+            {visiblePackingItems.length ? (
               <>
                 <div className="mt-5 hidden md:block">
                   {packingGroups.map(([category, categoryItems]) => (
@@ -345,9 +388,15 @@ export function PackingDashboard({
                       category={category}
                       color={categoryColors.get(category) ?? "#6A6353"}
                       completed={
-                        categoryItems.filter((item) => item.isPacked).length
+                        packingItems.filter(
+                          (item) => item.category === category && item.isPacked,
+                        ).length
                       }
-                      total={categoryItems.length}
+                      total={
+                        packingItems.filter(
+                          (item) => item.category === category,
+                        ).length
+                      }
                       statusLabel="packed"
                     >
                       {categoryItems.map((item) => (
@@ -361,18 +410,15 @@ export function PackingDashboard({
                           onToggle={() =>
                             onUpdate(item.id, { isPacked: !item.isPacked })
                           }
-                          onUndoPurchase={
-                            item.acquisition === "buy"
-                              ? async () => {
-                                  const success = await onUpdate(item.id, {
-                                    isPurchased: false,
-                                    isPacked: false,
-                                  });
-                                  if (success)
-                                    toast.success("Moved back to shopping.");
-                                }
-                              : undefined
-                          }
+                          onMoveToShopping={async () => {
+                            const success = await onUpdate(item.id, {
+                              acquisition: "buy",
+                              isPurchased: false,
+                              isPacked: false,
+                            });
+                            if (success)
+                              toast.success("Moved to shopping list.");
+                          }}
                           onUpdate={(input) => onUpdate(item.id, input)}
                           onDelete={() => removeItem(item)}
                         />
@@ -387,9 +433,15 @@ export function PackingDashboard({
                       category={category}
                       color={categoryColors.get(category) ?? "#6A6353"}
                       completed={
-                        categoryItems.filter((item) => item.isPacked).length
+                        packingItems.filter(
+                          (item) => item.category === category && item.isPacked,
+                        ).length
                       }
-                      total={categoryItems.length}
+                      total={
+                        packingItems.filter(
+                          (item) => item.category === category,
+                        ).length
+                      }
                       statusLabel="packed"
                       mobile
                     >
@@ -405,18 +457,15 @@ export function PackingDashboard({
                             onToggle={() =>
                               onUpdate(item.id, { isPacked: !item.isPacked })
                             }
-                            onUndoPurchase={
-                              item.acquisition === "buy"
-                                ? async () => {
-                                    const success = await onUpdate(item.id, {
-                                      isPurchased: false,
-                                      isPacked: false,
-                                    });
-                                    if (success)
-                                      toast.success("Moved back to shopping.");
-                                  }
-                                : undefined
-                            }
+                            onMoveToShopping={async () => {
+                              const success = await onUpdate(item.id, {
+                                acquisition: "buy",
+                                isPurchased: false,
+                                isPacked: false,
+                              });
+                              if (success)
+                                toast.success("Moved to shopping list.");
+                            }}
                             onUpdate={(input) => onUpdate(item.id, input)}
                             onDelete={() => removeItem(item)}
                           />
@@ -429,8 +478,16 @@ export function PackingDashboard({
             ) : (
               <EmptyList
                 icon={<PackageCheck className="size-7" />}
-                title="Nothing to pack yet"
-                description="Items you already have and purchased items will appear here."
+                title={
+                  packingItems.length
+                    ? "Packed items hidden"
+                    : "Nothing to pack yet"
+                }
+                description={
+                  packingItems.length
+                    ? "Show packed items to see the complete packing list."
+                    : "Add the first item to your packing list."
+                }
               />
             )}
           </>
@@ -472,8 +529,8 @@ function NewItemForm({
       }}
       className={`mt-5 grid grid-cols-2 gap-2 border-y border-[#E9E0CF] bg-transparent px-1 py-2 md:items-center ${
         mode === "shopping"
-          ? "md:grid-cols-[34px_minmax(150px,1.2fr)_64px_145px_minmax(110px,.65fr)_minmax(130px,.75fr)_74px]"
-          : "md:grid-cols-[34px_minmax(180px,1.2fr)_64px_160px_minmax(160px,.8fr)_74px]"
+          ? "md:grid-cols-[34px_minmax(150px,1.2fr)_145px_64px_minmax(130px,.75fr)_minmax(110px,.65fr)_74px]"
+          : "md:grid-cols-[34px_minmax(180px,1.2fr)_160px_64px_minmax(160px,.8fr)_74px]"
       }`}
     >
       <span className="hidden aspect-square size-8 place-items-center rounded-[9px] bg-[#F0EADB] md:grid">
@@ -491,25 +548,6 @@ function NewItemForm({
           }
           placeholder={mode === "shopping" ? "Item to buy…" : "Item to pack…"}
           className={`${newItemInputClass} text-[14px] font-bold`}
-        />
-      </label>
-
-      <label>
-        <span className="sr-only">Quantity</span>
-        <input
-          type="number"
-          min={1}
-          max={999}
-          value={draft.quantity}
-          onChange={(event) =>
-            onChange((current) => ({
-              ...current,
-              quantity: Number(event.target.value),
-            }))
-          }
-          aria-label="Quantity"
-          title="Quantity"
-          className={`${newItemInputClass} ${numberInputClass} text-center font-['JetBrains_Mono']`}
         />
       </label>
 
@@ -532,6 +570,41 @@ function NewItemForm({
             ))}
           </select>
         </div>
+      </label>
+
+      <label>
+        <span className="sr-only">Quantity</span>
+        <input
+          type="number"
+          min={1}
+          max={999}
+          value={draft.quantity}
+          onChange={(event) =>
+            onChange((current) => ({
+              ...current,
+              quantity: Number(event.target.value),
+            }))
+          }
+          aria-label="Quantity"
+          title="Quantity"
+          className={`${newItemInputClass} ${numberInputClass} text-center font-['JetBrains_Mono']`}
+        />
+      </label>
+
+      <label className="col-span-2 md:col-span-1">
+        <span className="sr-only">Note</span>
+        <input
+          value={draft.notes ?? ""}
+          maxLength={500}
+          onChange={(event) =>
+            onChange((current) => ({
+              ...current,
+              notes: event.target.value,
+            }))
+          }
+          placeholder="Optional note…"
+          className={newItemInputClass}
+        />
       </label>
 
       {mode === "shopping" ? (
@@ -563,22 +636,6 @@ function NewItemForm({
           </div>
         </label>
       ) : null}
-
-      <label className="col-span-2 md:col-span-1">
-        <span className="sr-only">Note</span>
-        <input
-          value={draft.notes ?? ""}
-          maxLength={500}
-          onChange={(event) =>
-            onChange((current) => ({
-              ...current,
-              notes: event.target.value,
-            }))
-          }
-          placeholder="Optional note…"
-          className={newItemInputClass}
-        />
-      </label>
 
       <div className="col-span-2 flex justify-end gap-1 md:col-span-1">
         <button
@@ -620,7 +677,9 @@ function ShoppingRow({
   onDelete: () => void;
 }) {
   return (
-    <div className="group grid grid-cols-[48px_minmax(180px,1fr)_58px_minmax(120px,0.65fr)_140px_110px_42px_40px] items-center border-b border-[#E9E0CF] px-1 py-2 text-sm">
+    <div
+      className={`group grid ${SHOPPING_TABLE_GRID} items-center gap-2 border-b border-[#E9E0CF] px-2 py-2.5 text-sm`}
+    >
       <PackCheckbox
         checked={item.isPurchased}
         onClick={onPurchase}
@@ -636,6 +695,15 @@ function ShoppingRow({
         }`}
         onCommit={(name) => name.trim() && void onUpdate({ name })}
       />
+      <InlineSelect
+        value={item.category}
+        disabled={item.isPurchased}
+        ariaLabel="Category"
+        options={categories.map((value) => ({ value, label: value }))}
+        onChange={(category) => void onUpdate({ category })}
+        className="px-3 text-center font-bold"
+        style={categoryInputStyle(categoryColor)}
+      />
       <InlineNumber
         value={item.quantity}
         disabled={item.isPurchased}
@@ -649,26 +717,19 @@ function ShoppingRow({
         className="truncate text-[11px] text-[#A49B87]"
         onCommit={(notes) => void onUpdate({ notes })}
       />
-      <InlineSelect
-        value={item.category}
-        disabled={item.isPurchased}
-        ariaLabel="Category"
-        options={categories.map((value) => ({ value, label: value }))}
-        onChange={(category) => void onUpdate({ category })}
-        className="px-3 text-center font-bold"
-        style={categoryInputStyle(categoryColor)}
-      />
       <PriceInput
         value={item.price}
         disabled={item.isPurchased}
         onCommit={(price) => void onUpdate({ price })}
       />
-      <ProductLinksButton
-        links={item.productLinks}
-        locked={item.isPurchased}
-        onUpdate={(productLinks) => void onUpdate({ productLinks })}
-      />
-      {!item.isPurchased && <RowActions onDelete={onDelete} />}
+      <div className="flex justify-end gap-1">
+        <ProductLinksButton
+          links={item.productLinks}
+          locked={item.isPurchased}
+          onUpdate={(productLinks) => void onUpdate({ productLinks })}
+        />
+        {!item.isPurchased && <RowActions onDelete={onDelete} />}
+      </div>
     </div>
   );
 }
@@ -759,7 +820,7 @@ function PackingRow({
   categories,
   categoryColor,
   onToggle,
-  onUndoPurchase,
+  onMoveToShopping,
   onUpdate,
   onDelete,
 }: {
@@ -767,14 +828,16 @@ function PackingRow({
   categories: string[];
   categoryColor: string;
   onToggle: () => void;
-  onUndoPurchase?: () => void;
+  onMoveToShopping: () => void;
   onUpdate: (input: TripPackingItemUpdateInput) => Promise<boolean>;
   onDelete: () => void;
 }) {
   const locked = item.isPacked || item.isPurchased;
 
   return (
-    <div className="group grid grid-cols-[48px_minmax(180px,1fr)_58px_minmax(120px,0.65fr)_140px_76px] items-center border-b border-[#E9E0CF] px-1 py-2 text-sm">
+    <div
+      className={`group grid ${PACKING_TABLE_GRID} items-center gap-2 border-b border-[#E9E0CF] px-2 py-2.5 text-sm`}
+    >
       <PackCheckbox checked={item.isPacked} onClick={onToggle} />
       <InlineText
         value={item.name}
@@ -782,6 +845,15 @@ function PackingRow({
         ariaLabel="Item name"
         className={`pr-3 text-[15px] font-bold ${item.isPacked ? "line-through text-[#A49B87]" : "text-[#16130D]"}`}
         onCommit={(name) => name.trim() && void onUpdate({ name })}
+      />
+      <InlineSelect
+        value={item.category}
+        disabled={locked}
+        ariaLabel="Category"
+        options={categories.map((value) => ({ value, label: value }))}
+        onChange={(category) => void onUpdate({ category })}
+        className="px-3 text-center font-bold"
+        style={categoryInputStyle(categoryColor)}
       />
       <InlineNumber
         value={item.quantity}
@@ -796,17 +868,8 @@ function PackingRow({
         className="truncate text-[11px] text-[#A49B87]"
         onCommit={(notes) => void onUpdate({ notes })}
       />
-      <InlineSelect
-        value={item.category}
-        disabled={locked}
-        ariaLabel="Category"
-        options={categories.map((value) => ({ value, label: value }))}
-        onChange={(category) => void onUpdate({ category })}
-        className="px-3 text-center font-bold"
-        style={categoryInputStyle(categoryColor)}
-      />
       {!locked && (
-        <RowActions onDelete={onDelete} onUndoPurchase={onUndoPurchase} />
+        <RowActions onDelete={onDelete} onMoveToShopping={onMoveToShopping} />
       )}
     </div>
   );
@@ -817,7 +880,7 @@ function PackingCard({
   categories,
   categoryColor,
   onToggle,
-  onUndoPurchase,
+  onMoveToShopping,
   onUpdate,
   onDelete,
 }: {
@@ -825,7 +888,7 @@ function PackingCard({
   categories: string[];
   categoryColor: string;
   onToggle: () => void;
-  onUndoPurchase?: () => void;
+  onMoveToShopping: () => void;
   onUpdate: (input: TripPackingItemUpdateInput) => Promise<boolean>;
   onDelete: () => void;
 }) {
@@ -873,7 +936,7 @@ function PackingCard({
           />
         </div>
         {!locked && (
-          <RowActions onDelete={onDelete} onUndoPurchase={onUndoPurchase} />
+          <RowActions onDelete={onDelete} onMoveToShopping={onMoveToShopping} />
         )}
       </div>
     </div>
@@ -978,10 +1041,10 @@ function ProductLinksButton({
         onClick={() => setOpen((current) => !current)}
         aria-label="Product links"
         title="Product links"
-        className={`relative grid size-8 place-items-center rounded-[9px] transition-colors ${
+        className={`relative grid size-8 place-items-center rounded-[9px] transition-[color,background-color,opacity] ${
           links.length
             ? "bg-[#E8F0F6] text-[#3F6A8C]"
-            : "text-[#A49B87] hover:bg-[#F0EADB]"
+            : "text-[#A49B87] opacity-0 hover:bg-[#F0EADB] group-hover:opacity-100 focus:opacity-100"
         }`}
       >
         <Link2 className="size-3.5" />
@@ -1144,29 +1207,29 @@ function productLinkLabel(value: string) {
 
 function RowActions({
   onDelete,
-  onUndoPurchase,
+  onMoveToShopping,
 }: {
   onDelete: () => void;
-  onUndoPurchase?: () => void;
+  onMoveToShopping?: () => void;
 }) {
   return (
     <div className="flex justify-end gap-1">
-      {onUndoPurchase && (
+      {onMoveToShopping && (
         <button
           type="button"
-          onClick={onUndoPurchase}
-          aria-label="Move back to shopping list"
-          title="Move back to shopping list"
-          className="grid size-8 place-items-center rounded-lg text-[#B3A994] opacity-0 transition-opacity hover:bg-[#F0EADB] hover:text-[#6A6353] group-hover:opacity-100 focus:opacity-100"
+          onClick={onMoveToShopping}
+          aria-label="Move to shopping list"
+          title="Move to shopping list"
+          className="grid size-8 place-items-center rounded-[9px] text-[#B3A994] opacity-0 transition-[color,background-color,opacity] hover:bg-[#F0EADB] hover:text-[#6A6353] group-hover:opacity-100 focus:opacity-100"
         >
-          <Undo2 className="size-3.5" />
+          <ShoppingCart className="size-3.5" />
         </button>
       )}
       <button
         type="button"
         onClick={onDelete}
         aria-label="Delete item"
-        className="grid size-8 place-items-center rounded-lg text-[#B3A994] opacity-0 transition-opacity hover:bg-[#FBE7DD] hover:text-[#B8431F] group-hover:opacity-100 focus:opacity-100"
+        className="grid size-8 place-items-center rounded-[9px] text-[#B3A994] opacity-0 transition-[color,background-color,opacity] hover:bg-[#F0EADB] hover:text-[#B8431F] group-hover:opacity-100 focus:opacity-100"
       >
         <Trash2 className="size-3.5" />
       </button>
@@ -1675,6 +1738,45 @@ function ProgressBar({ value }: { value: number }) {
         className="h-full rounded-full bg-[#2E7A57] transition-[width] duration-300"
         style={{ width: `${value}%` }}
       />
+    </div>
+  );
+}
+
+function CompletedItemsToggle({
+  hidden,
+  count,
+  label,
+  onToggle,
+}: {
+  hidden: boolean;
+  count: number;
+  label: "bought" | "packed";
+  onToggle: () => void;
+}) {
+  if (!count) return null;
+
+  return (
+    <div className="mt-3 flex justify-end">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-pressed={hidden}
+        className={`inline-flex h-8 items-center gap-2 rounded-[10px] border px-3 text-[11px] font-bold transition-colors ${
+          hidden
+            ? "border-[#D8CEB8] bg-[#F0EADB] text-[#6A6353]"
+            : "border-transparent text-[#8A8270] hover:border-[#E1D8C5] hover:bg-[#F5F0E6]"
+        }`}
+      >
+        {hidden ? (
+          <Eye className="size-3.5" />
+        ) : (
+          <EyeOff className="size-3.5" />
+        )}
+        {hidden ? `Show ${label}` : `Hide ${label}`}
+        <span className="grid min-w-5 place-items-center rounded-full bg-white/70 px-1.5 py-0.5 font-['JetBrains_Mono'] text-[9px]">
+          {count}
+        </span>
+      </button>
     </div>
   );
 }

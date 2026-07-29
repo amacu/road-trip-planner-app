@@ -2,7 +2,6 @@ import type {
   TripDayWithStops,
   TripStopRecord,
   TripWithRelations,
-  UnassignedTripStopRecord,
 } from "@/types/trip";
 import type { Vehicle } from "@prisma/client";
 import {
@@ -70,9 +69,7 @@ export function toTripActivityPlain(
   };
 }
 
-export function toStopPoint(
-  stop: TripStopRecord | UnassignedTripStopRecord,
-): StopPoint {
+export function toStopPoint(stop: TripStopRecord): StopPoint {
   return {
     id: stop.id,
     name: stop.name,
@@ -194,7 +191,6 @@ export type TripPlain = {
   vehicle: VehiclePlain | null;
   members: TripMemberPlain[];
   days: TripDayPlain[];
-  unassignedStops: StopPoint[];
   stays: TripStayPlain[];
   packingItems: TripPackingItemPlain[];
   packingCategories: PackingCategory[];
@@ -247,7 +243,6 @@ export function toTripPlain(trip: TripWithRelations): TripPlain {
     vehicle: trip.vehicle ? toVehiclePlain(trip.vehicle) : null,
     members: trip.members.map(toTripMemberPlain),
     days: trip.days.map(toTripDayPlain),
-    unassignedStops: trip.stops.map(toStopPoint),
     stays: trip.stays.map((stay) => ({
       id: stay.id,
       afterDayId: stay.afterDayId,
