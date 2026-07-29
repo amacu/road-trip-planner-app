@@ -49,6 +49,11 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  logging: {
+    incomingRequests: {
+      ignore: [/^\/api\/routing(?:\?|$)/],
+    },
+  },
   experimental: {
     serverActions: {
       bodySizeLimit: "9mb",

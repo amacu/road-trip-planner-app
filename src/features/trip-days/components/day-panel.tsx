@@ -4,6 +4,7 @@ import {
   CalendarDays,
   Check,
   ChevronDown,
+  ChevronUp,
   Copy,
   Footprints,
   Landmark,
@@ -130,6 +131,8 @@ export function DayPanel({
   const [aiImportOpen, setAiImportOpen] = useState(false);
   const [walkingExcursionsCollapsed, setWalkingExcursionsCollapsed] =
     useState(false);
+  const [expandedWalkingExcursionIds, setExpandedWalkingExcursionIds] =
+    useState<Set<string>>(() => new Set());
   const addItemRef = useRef<HTMLLIElement>(null);
 
   useEffect(() => {
@@ -171,6 +174,51 @@ export function DayPanel({
     return count;
   }
 
+  function walkingExcursionAnchorId(stopIndex: number) {
+    let anchorIndex = stopIndex;
+    while (anchorIndex > 0 && stops[anchorIndex].travelMode === "walking") {
+      anchorIndex -= 1;
+    }
+    return stops[anchorIndex]?.id;
+  }
+
+  function walkingExcursionIsHidden(stopIndex: number) {
+    if (
+      !walkingExcursionsCollapsed ||
+      stopIndex === 0 ||
+      stops[stopIndex].travelMode !== "walking"
+    ) {
+      return false;
+    }
+    const anchorId = walkingExcursionAnchorId(stopIndex);
+    return !anchorId || !expandedWalkingExcursionIds.has(anchorId);
+  }
+
+  function collapseWalkingExcursion(anchorId: string) {
+    if (!walkingExcursionsCollapsed) {
+      setExpandedWalkingExcursionIds(
+        new Set(
+          stops
+            .filter(
+              (stop, index) =>
+                stop.id !== anchorId &&
+                stop.travelMode !== "walking" &&
+                walkingExcursionCountAfter(index) > 0,
+            )
+            .map((stop) => stop.id),
+        ),
+      );
+      setWalkingExcursionsCollapsed(true);
+      return;
+    }
+
+    setExpandedWalkingExcursionIds((current) => {
+      const next = new Set(current);
+      next.delete(anchorId);
+      return next;
+    });
+  }
+
   return (
     <div className="flex h-full min-h-0 flex-col bg-[#FFFAF0]">
       <header className="relative z-10 flex min-h-[70px] shrink-0 items-center border-b border-[#E4DBC8]/90 bg-[#FBF8F1]/95 px-4 py-3 shadow-[0_10px_24px_-18px_rgba(22,19,13,0.75)] backdrop-blur-md">
@@ -202,9 +250,14 @@ export function DayPanel({
             </button>
             <button
               type="button"
-              onClick={() =>
-                setWalkingExcursionsCollapsed((collapsed) => !collapsed)
-              }
+              onClick={() => {
+                if (walkingExcursionsCollapsed) {
+                  setWalkingExcursionsCollapsed(false);
+                } else {
+                  setExpandedWalkingExcursionIds(new Set());
+                  setWalkingExcursionsCollapsed(true);
+                }
+              }}
               disabled={walkingExcursionCount === 0}
               className={`grid size-[34px] place-items-center rounded-[10px] border transition-colors disabled:cursor-not-allowed disabled:opacity-35 ${
                 walkingExcursionsCollapsed
@@ -275,19 +328,23 @@ export function DayPanel({
             )}
             {stops.map((stop, i) => (
               <Fragment key={stop.id}>
-                {(!walkingExcursionsCollapsed ||
-                  i === 0 ||
-                  stop.travelMode !== "walking") && (
+                {!walkingExcursionIsHidden(i) && (
                   <StopCard
                     index={i}
                     stop={stop}
                     hiddenWalkingExcursionCount={
-                      walkingExcursionsCollapsed
+                      walkingExcursionsCollapsed &&
+                      stop.travelMode !== "walking" &&
+                      !expandedWalkingExcursionIds.has(stop.id)
                         ? walkingExcursionCountAfter(i)
                         : 0
                     }
                     onExpandWalkingExcursions={() =>
-                      setWalkingExcursionsCollapsed(false)
+                      setExpandedWalkingExcursionIds((current) => {
+                        const next = new Set(current);
+                        next.add(stop.id);
+                        return next;
+                      })
                     }
                     isWalkingExcursion={stop.travelMode === "walking"}
                     showDriveSpine={
@@ -316,23 +373,29 @@ export function DayPanel({
                     onSelect={() => onSelectStop?.(stop.id)}
                   />
                 )}
-                {i < stops.length - 1 &&
-                  (!walkingExcursionsCollapsed ||
-                    stops[i + 1].travelMode !== "walking") && (
-                    <RouteLegSummary
-                      leg={legs[i]}
-                      mode={stops[i + 1].travelMode}
-                      showDriveBranch={
-                        stops[i + 1].travelMode === "walking" &&
-                        stops
-                          .slice(i + 2)
-                          .some((item) => item.travelMode === "driving")
-                      }
-                      onModeChange={(travelMode) =>
-                        onUpdateStop(stops[i + 1].id, { travelMode })
-                      }
-                    />
-                  )}
+                {i < stops.length - 1 && !walkingExcursionIsHidden(i + 1) && (
+                  <RouteLegSummary
+                    leg={legs[i]}
+                    mode={stops[i + 1].travelMode}
+                    showDriveBranch={
+                      stops[i + 1].travelMode === "walking" &&
+                      stops
+                        .slice(i + 2)
+                        .some((item) => item.travelMode === "driving")
+                    }
+                    onModeChange={(travelMode) =>
+                      onUpdateStop(stops[i + 1].id, { travelMode })
+                    }
+                    onCollapseExcursion={
+                      stop.travelMode !== "walking" &&
+                      stops[i + 1].travelMode === "walking" &&
+                      (!walkingExcursionsCollapsed ||
+                        expandedWalkingExcursionIds.has(stop.id))
+                        ? () => collapseWalkingExcursion(stop.id)
+                        : undefined
+                    }
+                  />
+                )}
               </Fragment>
             ))}
             {addingType && (
@@ -938,11 +1001,13 @@ function RouteLegSummary({
   mode = "driving",
   showDriveBranch = false,
   onModeChange,
+  onCollapseExcursion,
 }: {
   leg?: { distanceKm: number; durationMin: number };
   mode?: "driving" | "walking";
   showDriveBranch?: boolean;
   onModeChange?: (mode: "driving" | "walking") => void;
+  onCollapseExcursion?: () => void;
 }) {
   const isWalking = mode === "walking";
 
@@ -998,6 +1063,17 @@ function RouteLegSummary({
           ? `${formatDuration(leg.durationMin)} · ${formatDistance(leg.distanceKm)}`
           : "Calculating route..."}
       </span>
+      {onCollapseExcursion && (
+        <button
+          type="button"
+          onClick={onCollapseExcursion}
+          className="ml-auto grid size-5 shrink-0 place-items-center rounded-full text-[#6E8B78] transition-colors hover:bg-[#E4F0E8] hover:text-[#376B4E] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9CB7A6]"
+          title="Collapse this stop's walking activities"
+          aria-label="Collapse this stop's walking activities"
+        >
+          <ChevronUp className="size-3" />
+        </button>
+      )}
     </li>
   );
 }

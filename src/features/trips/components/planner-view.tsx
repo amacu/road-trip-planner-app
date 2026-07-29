@@ -83,7 +83,6 @@ import type {
 } from "@/features/trips/lib/trip-view-model";
 import { useRouteMetrics } from "@/features/trips/hooks/use-route-metrics";
 import { formatDistance, formatDuration } from "@/lib/geo";
-import { reverseGeocode } from "@/lib/geocode-client";
 import type { GeocodeResult } from "@/lib/integrations/geocode";
 import type { FuelCountryPrice } from "@/lib/integrations/fuel-prices";
 import { openInGoogleMaps } from "@/lib/integrations/google-maps";
@@ -1427,18 +1426,6 @@ export function PlannerView({
     reorderDays(reordered.map((day) => day.id));
   }
 
-  async function handleAddPoi(poi: { name: string; lat: number; lng: number }) {
-    if (!currentDay) return;
-    const place = await reverseGeocode(poi.lat, poi.lng);
-    addStop(currentDay.id, {
-      name: poi.name,
-      address: place?.address ?? "",
-      lat: poi.lat,
-      lng: poi.lng,
-      countryCode: place?.countryCode ?? null,
-    });
-  }
-
   async function handleSaveTrip(patch: TripUpdateInput) {
     const result = await updateTripAction(trip.id, patch);
     if (!result.success) throw new Error(result.error);
@@ -1711,8 +1698,6 @@ export function PlannerView({
                     markerLabels={currentMarkerLabels}
                     activeStopId={selectedStopId ?? undefined}
                     activityPins={selectedStopActivityPins}
-                    showPois
-                    onAddPoi={handleAddPoi}
                   />
                 )}
                 {rightPanelMode === "map" && (

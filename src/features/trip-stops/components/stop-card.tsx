@@ -208,9 +208,16 @@ export function StopCard({
           </div>
 
           <div className="flex min-w-0 flex-1 items-start justify-between gap-2">
-            <button
-              type="button"
+            <div
+              role="button"
+              tabIndex={0}
               onClick={onSelect}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  onSelect?.();
+                }
+              }}
               className="min-w-0 flex-1 text-left"
             >
               <span className="flex min-w-0 items-center gap-1.5">
@@ -245,13 +252,16 @@ export function StopCard({
                   </span>
                 )}
               </span>
-              <span className="mt-1.5 block truncate text-[15px] font-black leading-tight text-[#16130D]">
+              <span
+                className="mt-1.5 block cursor-text select-text truncate text-[15px] font-black leading-tight text-[#16130D]"
+                onClick={(event) => event.stopPropagation()}
+              >
                 {stop.name}
               </span>
               <span className="mt-1 block truncate text-[11.5px] font-medium text-[#948B76]">
                 {stop.address || "No address"}
               </span>
-            </button>
+            </div>
 
             <div className="flex shrink-0 items-center gap-0.5">
               {headerAction}
