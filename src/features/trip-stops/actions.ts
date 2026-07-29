@@ -65,7 +65,7 @@ export async function createTripStopAction(
 }
 
 export async function updateTripStopAction(
-  tripId: string,
+  _tripId: string,
   stopId: string,
   input: unknown,
 ): Promise<ActionResult<TripStopSummaryPlain>> {
@@ -83,7 +83,6 @@ export async function updateTripStopAction(
     return { success: false, error: "Stop not found." };
   }
 
-  revalidatePath(`/trips/${tripId}`);
   return { success: true, data: toTripStopSummaryPlain(stop) };
 }
 

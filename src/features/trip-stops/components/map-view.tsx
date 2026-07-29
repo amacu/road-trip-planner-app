@@ -9,8 +9,10 @@ import type {
 } from "leaflet";
 
 import {
+  buildRouteSegments,
+  fallbackRouteForStops,
   fetchDrivingRoute,
-  straightRouteForStops,
+  fetchWalkingRoute,
   walkingRouteForStops,
 } from "@/lib/integrations/routing";
 import { fetchPois } from "@/lib/poi-client";
@@ -66,10 +68,11 @@ const POI_STYLES: Record<
 
 type Props = {
   stops: StopPoint[];
+  /** Whether to draw a connecting route. Useful for marker-only overview maps. */
+  showRoute?: boolean;
   /** Stable identity of the route currently shown (for example a day id). Changing it re-fits the camera without reacting to ordinary stop edits. */
   viewportKey?: string;
   activeStopId?: string;
-  onStopMove?: (id: string, lat: number, lng: number) => void;
   /** Optional per-stop marker color (e.g. one color per day) keyed by stop id, overriding the default active/inactive coloring. */
   stopColors?: Record<string, string>;
   /** Optional marker text keyed by stop id, used to keep map numbering aligned with the route list. */
@@ -82,31 +85,27 @@ type Props = {
   showPois?: boolean;
   /** Called when a user clicks a POI marker's "add" action — lets callers add it as a stop. */
   onAddPoi?: (poi: PoiResult) => void;
-  /** Marker ids that participate in routing but must not be draggable (for example overnight stay anchors). */
-  nonDraggableIds?: ReadonlySet<string>;
 };
 
 export function MapView({
   stops,
+  showRoute = true,
   viewportKey,
   activeStopId,
-  onStopMove,
   stopColors,
   markerLabels,
   excludeFromRouteIds,
   activityPins,
   showPois,
   onAddPoi,
-  nonDraggableIds,
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<LeafletMap | null>(null);
   const markersRef = useRef<LeafletMarker[]>([]);
   const activityMarkersRef = useRef<LeafletMarker[]>([]);
   const poiMarkersRef = useRef<LeafletMarker[]>([]);
-  const lineRef = useRef<Polyline | null>(null);
+  const routeLinesRef = useRef<Polyline[]>([]);
   const LRef = useRef<typeof import("leaflet") | null>(null);
-  const onStopMoveRef = useRef(onStopMove);
   const onAddPoiRef = useRef(onAddPoi);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
   const initialFrameRef = useRef<number | null>(null);
@@ -116,11 +115,11 @@ export function MapView({
   // Always reflects the latest props, readable from inside the async
   // Leaflet-init callback below (which captures stale closures otherwise).
   const stopsRef = useRef(stops);
+  const showRouteRef = useRef(showRoute);
   const activeStopIdRef = useRef(activeStopId);
   const stopColorsRef = useRef(stopColors);
   const markerLabelsRef = useRef(markerLabels);
   const excludeFromRouteIdsRef = useRef(excludeFromRouteIds);
-  const nonDraggableIdsRef = useRef(nonDraggableIds);
   const activityPinsRef = useRef(activityPins);
   const showPoisRef = useRef(showPois);
   const viewportKeyRef = useRef(viewportKey);
@@ -130,10 +129,6 @@ export function MapView({
   const lastFocusedStopIdRef = useRef<string | undefined>(undefined);
   const lastViewportKeyRef = useRef<string | undefined>(undefined);
   const hasFittedOnceRef = useRef(false);
-
-  useEffect(() => {
-    onStopMoveRef.current = onStopMove;
-  }, [onStopMove]);
 
   useEffect(() => {
     onAddPoiRef.current = onAddPoi;
@@ -153,21 +148,21 @@ export function MapView({
 
   useEffect(() => {
     stopsRef.current = stops;
+    showRouteRef.current = showRoute;
     viewportKeyRef.current = viewportKey;
     activeStopIdRef.current = activeStopId;
     stopColorsRef.current = stopColors;
     markerLabelsRef.current = markerLabels;
     excludeFromRouteIdsRef.current = excludeFromRouteIds;
-    nonDraggableIdsRef.current = nonDraggableIds;
     activityPinsRef.current = activityPins;
   }, [
     stops,
+    showRoute,
     viewportKey,
     activeStopId,
     stopColors,
     markerLabels,
     excludeFromRouteIds,
-    nonDraggableIds,
     activityPins,
   ]);
 
@@ -227,11 +222,7 @@ export function MapView({
         iconSize: [30, 30],
         iconAnchor: [15, 30],
       });
-      const marker = L.marker([stop.lat, stop.lng], {
-        icon,
-        draggable:
-          !!onStopMoveRef.current && !nonDraggableIdsRef.current?.has(stop.id),
-      })
+      const marker = L.marker([stop.lat, stop.lng], { icon })
         .addTo(map)
         .bindTooltip(
           `${isStay ? "Overnight · " : isOvernightEnd ? "" : `${escapeHtml(markerLabel)}. `}${escapeHtml(stop.name)}`,
@@ -240,10 +231,6 @@ export function MapView({
             offset: [0, -28],
           },
         );
-      marker.on("dragend", (e) => {
-        const ll = (e.target as LeafletMarker).getLatLng();
-        onStopMoveRef.current?.(stop.id, ll.lat, ll.lng);
-      });
       markersRef.current.push(marker);
     });
 
@@ -324,47 +311,77 @@ export function MapView({
       });
     }
 
-    lineRef.current?.remove();
-    lineRef.current = null;
-
-    if (routeStops.length < 2) return;
-
-    const drawRoute = (
-      latlngs: Array<[number, number]>,
-      options?: { fallback?: boolean },
-    ) => {
-      lineRef.current?.remove();
-      lineRef.current = L.polyline(latlngs, {
-        color: "var(--color-brand)",
-        weight: 5,
-        opacity: options?.fallback ? 0.55 : 0.9,
-        dashArray: options?.fallback ? "2 9" : undefined,
-        lineCap: "round",
-        lineJoin: "round",
-      }).addTo(map);
-    };
-
-    drawRoute(straightRouteForStops(routeStops), { fallback: true });
+    routeLinesRef.current.forEach((line) => line.remove());
+    routeLinesRef.current = [];
 
     routeRequestRef.current?.abort();
+    routeRequestRef.current = null;
+    if (!showRouteRef.current || routeStops.length < 2) return;
+
+    const routeSegments = buildRouteSegments(routeStops);
+
+    const drawRoutes = (
+      routes: Array<{
+        path: Array<[number, number]>;
+      } | null>,
+      fallbackSegments: boolean[] = [],
+    ) => {
+      routeLinesRef.current.forEach((line) => line.remove());
+      routeLinesRef.current = routes.flatMap((route, index) => {
+        if (!route) return [];
+        const walking = routeSegments[index].mode === "walking";
+        const fallback = fallbackSegments[index] ?? false;
+        return [
+          L.polyline(route.path, {
+            color: walking ? "#2E7A57" : "var(--color-brand)",
+            weight: walking ? 4 : 5,
+            opacity: fallback ? 0.5 : walking ? 0.82 : 0.9,
+            dashArray: walking ? "7 8" : fallback ? "2 9" : undefined,
+            lineCap: "round",
+            lineJoin: "round",
+          }).addTo(map),
+        ];
+      });
+    };
+
+    drawRoutes(
+      routeSegments.map((segment) =>
+        segment.mode === "walking"
+          ? walkingRouteForStops([segment.from, segment.to])
+          : fallbackRouteForStops([segment.from, segment.to]),
+      ),
+      routeSegments.map(() => true),
+    );
+
     const controller = new AbortController();
     routeRequestRef.current = controller;
     Promise.all(
-      routeStops.slice(1).map((destination, index) => {
-        const pair = [routeStops[index], destination];
-        return destination.travelMode === "walking"
-          ? Promise.resolve(walkingRouteForStops(pair))
+      routeSegments.map((segment) => {
+        const pair = [segment.from, segment.to];
+        return segment.mode === "walking"
+          ? fetchWalkingRoute(pair, controller.signal)
           : fetchDrivingRoute(pair, controller.signal);
       }),
     )
       .then((routes) => {
-        if (!controller.signal.aborted && routes.every(Boolean)) {
-          drawRoute(
-            routes.flatMap((route, index) =>
-              index === 0 ? (route?.path ?? []) : (route?.path.slice(1) ?? []),
-            ),
-          );
-        }
+        if (controller.signal.aborted) return;
+        const resolvedRoutes = routes.map(
+          (route, index) =>
+            route ??
+            (routeSegments[index].mode === "walking"
+              ? walkingRouteForStops([
+                  routeSegments[index].from,
+                  routeSegments[index].to,
+                ])
+              : fallbackRouteForStops([
+                  routeSegments[index].from,
+                  routeSegments[index].to,
+                ])),
+        );
+        drawRoutes(
+          resolvedRoutes,
+          routes.map((route) => route === null),
+        );
       })
       .catch((error: unknown) => {
         if (!(error instanceof DOMException && error.name === "AbortError")) {
@@ -561,7 +578,7 @@ export function MapView({
       markersRef.current = [];
       activityMarkersRef.current = [];
       poiMarkersRef.current = [];
-      lineRef.current = null;
+      routeLinesRef.current = [];
       mapRef.current = null;
       LRef.current = null;
     };
@@ -575,6 +592,7 @@ export function MapView({
     drawMarkersAndRoute();
   }, [
     stops,
+    showRoute,
     viewportKey,
     activeStopId,
     stopColors,

@@ -3,14 +3,19 @@
 import {
   CalendarDays,
   Check,
+  ChevronDown,
   Copy,
   Footprints,
+  Landmark,
+  ListCollapse,
   Loader2,
+  MapPin,
   MessageCircleMore,
   Navigation,
   Plus,
   Route,
   Sparkles,
+  Undo2,
 } from "lucide-react";
 import { Fragment, useEffect, useRef, useState } from "react";
 
@@ -76,6 +81,7 @@ export function DayPanel({
   onReorderActivities,
   onSetDayStartTime,
   onLaunchNav,
+  onOpenStopNotes,
   onSelectStop,
   stay,
   previousStay,
@@ -109,6 +115,7 @@ export function DayPanel({
   onReorderActivities: (stopId: string, orderedActivityIds: string[]) => void;
   onSetDayStartTime: (startTime: string) => void;
   onLaunchNav: () => void;
+  onOpenStopNotes?: (stopId: string) => void;
   /** Called with a stop's id when it's expanded/selected — lets the map recenter on it and show its activities. */
   onSelectStop?: (stopId: string) => void;
   stay?: TripStayPlain;
@@ -121,6 +128,8 @@ export function DayPanel({
     null,
   );
   const [aiImportOpen, setAiImportOpen] = useState(false);
+  const [walkingExcursionsCollapsed, setWalkingExcursionsCollapsed] =
+    useState(false);
   const addItemRef = useRef<HTMLLIElement>(null);
 
   useEffect(() => {
@@ -128,7 +137,15 @@ export function DayPanel({
     addItemRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
   }, [addingType]);
 
-  const schedule = computeStopSchedule(day.startTime, stops, legs);
+  const schedule = computeStopSchedule(
+    day.startTime,
+    stops,
+    legs,
+    startLeg?.durationMin,
+  );
+  const walkingExcursionCount = stops.filter(
+    (stop, stopIndex) => stopIndex > 0 && stop.travelMode === "walking",
+  ).length;
   const lastDepartureTime = schedule[schedule.length - 1]?.departureTime;
   const stayArrivalTime =
     lastDepartureTime && endLeg
@@ -143,6 +160,15 @@ export function DayPanel({
     if (!movedStop) return;
     reordered.splice(destination, 0, movedStop);
     onReorderStops(reordered.map((stop) => stop.id));
+  }
+
+  function walkingExcursionCountAfter(stopIndex: number) {
+    let count = 0;
+    for (let i = stopIndex + 1; i < stops.length; i += 1) {
+      if (stops[i].travelMode !== "walking") break;
+      count += 1;
+    }
+    return count;
   }
 
   return (
@@ -173,6 +199,31 @@ export function DayPanel({
               aria-label="Start navigation in Google Maps"
             >
               <Navigation className="size-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                setWalkingExcursionsCollapsed((collapsed) => !collapsed)
+              }
+              disabled={walkingExcursionCount === 0}
+              className={`grid size-[34px] place-items-center rounded-[10px] border transition-colors disabled:cursor-not-allowed disabled:opacity-35 ${
+                walkingExcursionsCollapsed
+                  ? "border-[#7FA78E] bg-[#E4F0E8] text-[#4F8065]"
+                  : "border-[#D8CEB8] bg-[#F3EFE4] text-[#756D5E] hover:border-[#9CB7A6] hover:bg-[#EAF2EC] hover:text-[#4F8065]"
+              }`}
+              title={
+                walkingExcursionsCollapsed
+                  ? "Show walking excursions"
+                  : "Collapse walking excursions"
+              }
+              aria-label={
+                walkingExcursionsCollapsed
+                  ? "Show walking excursions"
+                  : "Collapse walking excursions"
+              }
+              aria-pressed={walkingExcursionsCollapsed}
+            >
+              <ListCollapse className="size-4" />
             </button>
             <button
               type="button"
@@ -224,66 +275,114 @@ export function DayPanel({
             )}
             {stops.map((stop, i) => (
               <Fragment key={stop.id}>
-                <StopCard
-                  index={i}
-                  stop={stop}
-                  isFirst={i === 0}
-                  isLast={i === stops.length - 1}
-                  arrivalTime={schedule[i]?.arrivalTime ?? null}
-                  departureTime={schedule[i]?.departureTime ?? null}
-                  dayStartTime={day.startTime ?? ""}
-                  onSetDayStartTime={onSetDayStartTime}
-                  onUpdate={(patch) => onUpdateStop(stop.id, patch)}
-                  onRemove={() => onRemoveStop(stop.id)}
-                  onAddActivity={(place) => onAddActivity(stop.id, place)}
-                  onUpdateActivity={onUpdateActivity}
-                  onRemoveActivity={onRemoveActivity}
-                  onReorderActivities={(activityIds) =>
-                    onReorderActivities(stop.id, activityIds)
-                  }
-                  onMoveUp={() => moveStop(i, -1)}
-                  onMoveDown={() => moveStop(i, 1)}
-                  onSelect={() => onSelectStop?.(stop.id)}
-                />
-                {i < stops.length - 1 && (
-                  <RouteLegSummary
-                    leg={legs[i]}
-                    mode={stops[i + 1].travelMode}
-                    onModeChange={(travelMode) =>
-                      onUpdateStop(stops[i + 1].id, { travelMode })
+                {(!walkingExcursionsCollapsed ||
+                  i === 0 ||
+                  stop.travelMode !== "walking") && (
+                  <StopCard
+                    index={i}
+                    stop={stop}
+                    hiddenWalkingExcursionCount={
+                      walkingExcursionsCollapsed
+                        ? walkingExcursionCountAfter(i)
+                        : 0
                     }
+                    onExpandWalkingExcursions={() =>
+                      setWalkingExcursionsCollapsed(false)
+                    }
+                    isWalkingExcursion={stop.travelMode === "walking"}
+                    showDriveSpine={
+                      stop.travelMode === "walking" &&
+                      stops
+                        .slice(i + 1)
+                        .some((item) => item.travelMode === "driving")
+                    }
+                    isFirst={i === 0}
+                    isLast={i === stops.length - 1}
+                    arrivalTime={schedule[i]?.arrivalTime ?? null}
+                    departureTime={schedule[i]?.departureTime ?? null}
+                    dayStartTime={day.startTime ?? ""}
+                    onSetDayStartTime={onSetDayStartTime}
+                    onUpdate={(patch) => onUpdateStop(stop.id, patch)}
+                    onRemove={() => onRemoveStop(stop.id)}
+                    onAddActivity={(place) => onAddActivity(stop.id, place)}
+                    onUpdateActivity={onUpdateActivity}
+                    onRemoveActivity={onRemoveActivity}
+                    onReorderActivities={(activityIds) =>
+                      onReorderActivities(stop.id, activityIds)
+                    }
+                    onMoveUp={() => moveStop(i, -1)}
+                    onMoveDown={() => moveStop(i, 1)}
+                    onOpenNotes={() => onOpenStopNotes?.(stop.id)}
+                    onSelect={() => onSelectStop?.(stop.id)}
                   />
                 )}
+                {i < stops.length - 1 &&
+                  (!walkingExcursionsCollapsed ||
+                    stops[i + 1].travelMode !== "walking") && (
+                    <RouteLegSummary
+                      leg={legs[i]}
+                      mode={stops[i + 1].travelMode}
+                      showDriveBranch={
+                        stops[i + 1].travelMode === "walking" &&
+                        stops
+                          .slice(i + 2)
+                          .some((item) => item.travelMode === "driving")
+                      }
+                      onModeChange={(travelMode) =>
+                        onUpdateStop(stops[i + 1].id, { travelMode })
+                      }
+                    />
+                  )}
               </Fragment>
             ))}
             {addingType && (
               <li ref={addItemRef} className="mt-2">
-                <div className="mb-2 grid grid-cols-2 gap-2 rounded-[13px] border border-[#E7DFCE] bg-white p-2">
-                  {(["stop", "activity"] as const).map((type) => (
-                    <button
-                      key={type}
-                      type="button"
-                      onClick={() => setAddingType(type)}
-                      className={`rounded-[10px] px-3 py-2 text-xs font-bold capitalize transition ${
-                        addingType === type
-                          ? type === "activity"
-                            ? "bg-violet-100 text-violet-700"
-                            : "bg-[#FBE7DD] text-[#B8431F]"
-                          : "bg-[#F3EFE4] text-[#7a7264]"
-                      }`}
-                    >
-                      {type}
-                    </button>
-                  ))}
+                <div className="rounded-[18px] border border-[#D8CEB8] bg-[#F8F4EC] p-3 shadow-[0_10px_26px_rgba(22,19,13,0.08)]">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-[13px] font-black text-foreground">
+                        Add route item
+                      </p>
+                      <p className="mt-0.5 text-[10px] font-semibold text-muted-foreground">
+                        Choose its role in this day
+                      </p>
+                    </div>
+                    <div className="flex rounded-[11px] bg-[#EEE7DA] p-1">
+                      {(
+                        [
+                          ["stop", "Stop", MapPin],
+                          ["activity", "Activity", Landmark],
+                        ] as const
+                      ).map(([type, label, Icon]) => (
+                        <button
+                          key={type}
+                          type="button"
+                          onClick={() => setAddingType(type)}
+                          className={`inline-flex h-8 items-center gap-1.5 rounded-[8px] px-2.5 text-[10.5px] font-bold transition ${
+                            addingType === type
+                              ? type === "activity"
+                                ? "bg-[#7C5CBF] text-white shadow-sm"
+                                : "bg-brand text-brand-foreground shadow-sm"
+                              : "text-[#7A7264] hover:text-foreground"
+                          }`}
+                        >
+                          <Icon className="size-3.5" />
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <AddStopBox
+                    embedded
+                    onAdd={(result) => {
+                      onAddStop(result, addingType);
+                      setAddingType(null);
+                    }}
+                    onClose={() => setAddingType(null)}
+                    placeholder={`Search a place for this ${addingType}`}
+                    helpText="Search by name or address, or paste a Google Maps link."
+                  />
                 </div>
-                <AddStopBox
-                  onAdd={(result) => {
-                    onAddStop(result, addingType);
-                    setAddingType(null);
-                  }}
-                  onClose={() => setAddingType(null)}
-                  placeholder={`Search a place for this ${addingType}`}
-                />
               </li>
             )}
           </ol>
@@ -837,14 +936,34 @@ function parseAiPlan(raw: string): AiDayImportPlan {
 function RouteLegSummary({
   leg,
   mode = "driving",
+  showDriveBranch = false,
   onModeChange,
 }: {
   leg?: { distanceKm: number; durationMin: number };
   mode?: "driving" | "walking";
+  showDriveBranch?: boolean;
   onModeChange?: (mode: "driving" | "walking") => void;
 }) {
+  const isWalking = mode === "walking";
+
   return (
-    <li className="relative flex min-h-9 items-center gap-2 py-1.5 pl-[66px] pr-1 text-[#9D9483] before:absolute before:bottom-0 before:left-[51px] before:top-0 before:border-l before:border-dashed before:border-[#D8CEB8]">
+    <li
+      className={`relative flex min-h-9 items-center gap-2 py-1.5 pr-1 text-[#9D9483] ${
+        isWalking ? "pl-[66px]" : "pl-[34px]"
+      }`}
+    >
+      {showDriveBranch && (
+        <span className="absolute bottom-0 left-[18px] top-0 border-l border-dashed border-[#D1C7B2]" />
+      )}
+      {!isWalking && (
+        <>
+          <span className="absolute bottom-3 left-[18px] top-0 border-l border-dashed border-[#D1C7B2]" />
+          <ChevronDown
+            className="absolute bottom-0 left-[18px] z-[1] size-3 -translate-x-1/2 text-[#BEB39D]"
+            strokeWidth={2.2}
+          />
+        </>
+      )}
       {onModeChange ? (
         <label className="group/mode inline-flex items-center gap-1 text-[10.5px] font-bold text-[#8C8373] transition-colors hover:text-foreground">
           {mode === "walking" ? (
@@ -863,6 +982,12 @@ function RouteLegSummary({
             <option value="driving">Drive</option>
             <option value="walking">Walk</option>
           </select>
+          {isWalking && (
+            <Undo2
+              className="ml-0.5 size-3 text-[#6E8B78]"
+              aria-label="Returns to the previous stop"
+            />
+          )}
         </label>
       ) : null}
       {onModeChange && (

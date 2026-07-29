@@ -95,28 +95,31 @@ export type StopSchedule = {
 
 /**
  * Derives each stop's arrival/departure time from the day's start time, the
- * drive duration of each leg, and each stop's visit duration. The first
- * stop has no arrival (it's the day's starting point) and departs at
- * `dayStartTime`; every later stop arrives at the previous stop's departure
- * time plus the leg's drive duration, and departs after its visit duration.
+ * drive duration of each leg, and each stop's visit duration. When the day
+ * starts away from the first stop, `initialLegDurationMin` shifts its arrival
+ * by that opening journey. Every stop then departs after its visit duration.
  */
 export function computeStopSchedule(
   dayStartTime: string | null,
-  stops: Array<{ visitDurationMin: number | null }>,
+  stops: Array<{
+    visitDurationMin: number | null;
+    itemType?: "stop" | "activity";
+  }>,
   legs: Array<{ durationMin: number }>,
+  initialLegDurationMin = 0,
 ): StopSchedule[] {
   if (!dayStartTime)
     return stops.map(() => ({ arrivalTime: null, departureTime: null }));
 
   const schedule: StopSchedule[] = [];
-  let cursor = dayStartTime;
+  let cursor = addMinutesToTime(dayStartTime, initialLegDurationMin);
 
   for (let i = 0; i < stops.length; i++) {
-    const arrivalTime = i === 0 ? null : cursor;
-    const departureTime =
-      i === 0
-        ? dayStartTime
-        : addMinutesToTime(cursor, stops[i].visitDurationMin ?? 0);
+    const arrivalTime = cursor;
+    const departureTime = addMinutesToTime(
+      cursor,
+      stops[i].visitDurationMin ?? 0,
+    );
     schedule.push({ arrivalTime, departureTime });
 
     const leg = legs[i];

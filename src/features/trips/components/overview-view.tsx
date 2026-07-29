@@ -66,6 +66,9 @@ export function OverviewView({
 }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const allStops = days.flatMap((day) => day.stops);
+  const overviewMapStops = allStops.filter(
+    (stop) => stop.itemType !== "activity",
+  );
   const stopColors = buildDayStopColors(days);
   const stopCount = allStops.length;
   const routeStart = allStops[0]?.name ?? "Start";
@@ -157,7 +160,11 @@ export function OverviewView({
       </div>
 
       <section className="relative min-h-[400px]">
-        <MapView stops={allStops} stopColors={stopColors} />
+        <MapView
+          stops={overviewMapStops}
+          stopColors={stopColors}
+          showRoute={false}
+        />
       </section>
 
       <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>

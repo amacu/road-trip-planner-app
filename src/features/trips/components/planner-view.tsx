@@ -17,7 +17,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { toast } from "sonner";
 
@@ -165,6 +165,35 @@ function stayAsStop(stay: TripStayPlain, id: string): StopPoint {
   };
 }
 
+function drivingRouteStops(stops: StopPoint[]) {
+  return stops.filter(
+    (stop, index) => index === 0 || stop.travelMode !== "walking",
+  );
+}
+
+function routeStopsWithSelectedExcursion(
+  stops: StopPoint[],
+  selectedStopId: string | null,
+) {
+  if (!selectedStopId) return drivingRouteStops(stops);
+
+  const selectedIndex = stops.findIndex((stop) => stop.id === selectedStopId);
+  if (selectedIndex < 0) return drivingRouteStops(stops);
+
+  let anchorIndex = selectedIndex;
+  while (anchorIndex > 0 && stops[anchorIndex].travelMode === "walking") {
+    anchorIndex -= 1;
+  }
+
+  return stops.filter((stop, index) => {
+    if (index === 0 || stop.travelMode !== "walking") return true;
+    if (index <= anchorIndex) return false;
+    return !stops
+      .slice(anchorIndex + 1, index)
+      .some((item) => item.travelMode !== "walking");
+  });
+}
+
 export function PlannerView({
   trip,
   vehicles,
@@ -234,6 +263,10 @@ export function PlannerView({
   // instead of just the active day — toggled by the "Trip summary" tile.
   const [showAllDays, setShowAllDays] = useState(false);
   const [rightPanelMode, setRightPanelMode] = useState<"map" | "notes">("map");
+  const [notesFocus, setNotesFocus] = useState<{
+    stopId: string;
+    request: number;
+  } | null>(null);
   // The stop a user expanded in the day panel — the map recenters on it
   // and shows its activities as extra pins while it's selected.
   const [selectedStopId, setSelectedStopId] = useState<string | null>(null);
@@ -253,51 +286,87 @@ export function PlannerView({
   const previousStay = stays.find(
     (stay) => stay.afterDayId === days[currentDayIndex - 1]?.id,
   );
-  const allStops = days.flatMap((day) => day.stops);
-  const selectedStopActivityPins =
-    allStops
-      .find((stop) => stop.id === selectedStopId)
-      ?.activities.filter((a) => a.lat !== 0 || a.lng !== 0)
-      .map((a) => ({ id: a.id, lat: a.lat, lng: a.lng, title: a.title })) ?? [];
-  const allStopColors = Object.fromEntries(
-    days.flatMap((day) =>
-      day.stops.map((stop, index) => [
-        stop.id,
-        stop.itemType === "activity"
-          ? "#7C5CBF"
-          : index === 0
-            ? "#16130D"
-            : "#E4562A",
-      ]),
-    ),
+  const deferredMapDays = useDeferredValue(days);
+  const deferredCurrentStops = useMemo(
+    () => deferredMapDays.find((day) => day.id === currentDayId)?.stops ?? [],
+    [currentDayId, deferredMapDays],
   );
-  const allMarkerLabels = Object.fromEntries(
-    days.flatMap((day) =>
-      day.stops.map((stop, index) => [stop.id, `${index + 1}`]),
-    ),
+  const allStops = useMemo(
+    () => deferredMapDays.flatMap((day) => day.stops),
+    [deferredMapDays],
   );
-  const currentStopColors = Object.fromEntries(
-    currentStops.map((stop, index) => [
-      stop.id,
-      stop.itemType === "activity"
-        ? "#7C5CBF"
-        : index === 0
-          ? "#16130D"
-          : "#E4562A",
-    ]),
+  const selectedStopActivityPins = useMemo(
+    () =>
+      allStops
+        .find((stop) => stop.id === selectedStopId)
+        ?.activities.filter((a) => a.lat !== 0 || a.lng !== 0)
+        .map((a) => ({
+          id: a.id,
+          lat: a.lat,
+          lng: a.lng,
+          title: a.title,
+        })) ?? [],
+    [allStops, selectedStopId],
   );
-  const currentMarkerLabels = Object.fromEntries(
-    currentStops.map((stop, index) => [stop.id, `${index + 1}`]),
+  const allStopColors = useMemo(
+    () =>
+      Object.fromEntries(
+        deferredMapDays.flatMap((day) =>
+          day.stops.map((stop, index) => [
+            stop.id,
+            stop.itemType === "activity"
+              ? "#7C5CBF"
+              : index === 0
+                ? "#16130D"
+                : "#E4562A",
+          ]),
+        ),
+      ),
+    [deferredMapDays],
+  );
+  const allMarkerLabels = useMemo(
+    () =>
+      Object.fromEntries(
+        deferredMapDays.flatMap((day) =>
+          day.stops.map((stop, index) => [stop.id, `${index + 1}`]),
+        ),
+      ),
+    [deferredMapDays],
+  );
+  const currentStopColors = useMemo(
+    () =>
+      Object.fromEntries(
+        deferredCurrentStops.map((stop, index) => [
+          stop.id,
+          stop.itemType === "activity"
+            ? "#7C5CBF"
+            : index === 0
+              ? "#16130D"
+              : "#E4562A",
+        ]),
+      ),
+    [deferredCurrentStops],
+  );
+  const currentMarkerLabels = useMemo(
+    () =>
+      Object.fromEntries(
+        deferredCurrentStops.map((stop, index) => [stop.id, `${index + 1}`]),
+      ),
+    [deferredCurrentStops],
   );
 
+  // Route calculation and Leaflet redraws are substantially more expensive
+  // than updating a control in the itinerary. Let the card render first and
+  // update the map/metrics in a deferred render instead of blocking the click.
+  const deferredRouteDays = deferredMapDays;
   const routeDays = useMemo(
     () =>
-      days.map((day, index) => {
+      deferredRouteDays.map((day, index) => {
         const previousStay = stays.find(
-          (stay) => stay.afterDayId === days[index - 1]?.id,
+          (stay) => stay.afterDayId === deferredRouteDays[index - 1]?.id,
         );
         const stay = stays.find((item) => item.afterDayId === day.id);
-        const nextDayFirstStop = days[index + 1]?.stops[0];
+        const nextDayFirstStop = deferredRouteDays[index + 1]?.stops[0];
         const points: StopPoint[] = [];
 
         if (
@@ -314,21 +383,21 @@ export function PlannerView({
           points.push({ ...nextDayFirstStop, id: `overnight-end-${day.id}` });
         }
 
-        return { ...day, stops: points };
+        return {
+          ...day,
+          stops: drivingRouteStops(points),
+          allRouteStops: points,
+        };
       }),
-    [days, stays],
+    [deferredRouteDays, stays],
   );
-  const currentRouteStops =
-    routeDays.find((day) => day.id === currentDayId)?.stops ?? currentStops;
-  const routeAnchorIds = new Set(
-    currentRouteStops
-      .filter(
-        (stop) =>
-          stop.id.startsWith("stay-") || stop.id.startsWith("overnight-"),
-      )
-      .map((stop) => stop.id),
+  const currentRouteDay = routeDays.find((day) => day.id === currentDayId);
+  const currentRouteStops = currentRouteDay?.stops ?? currentStops;
+  const allCurrentRouteStops = currentRouteDay?.allRouteStops ?? currentStops;
+  const currentMapStops = useMemo(
+    () => routeStopsWithSelectedExcursion(allCurrentRouteStops, selectedStopId),
+    [allCurrentRouteStops, selectedStopId],
   );
-
   const dayMetrics = useRouteMetrics(routeDays);
 
   // The trip's assigned vehicle (Trip.vehicleId) is the source of truth for
@@ -694,6 +763,14 @@ export function PlannerView({
     setActiveDayId(dayId);
     setShowAllDays(false);
     setSelectedStopId(null);
+  }
+
+  function openNotesForStop(stopId: string) {
+    setNotesFocus((current) => ({
+      stopId,
+      request: (current?.request ?? 0) + 1,
+    }));
+    setRightPanelMode("notes");
   }
 
   function removeDay(dayId: string) {
@@ -1350,16 +1427,6 @@ export function PlannerView({
     reorderDays(reordered.map((day) => day.id));
   }
 
-  async function handleStopMove(stopId: string, lat: number, lng: number) {
-    const place = await reverseGeocode(lat, lng);
-    await updateStop(stopId, {
-      lat,
-      lng,
-      address: place?.address,
-      countryCode: place?.countryCode ?? null,
-    });
-  }
-
   async function handleAddPoi(poi: { name: string; lat: number; lng: number }) {
     if (!currentDay) return;
     const place = await reverseGeocode(poi.lat, poi.lng);
@@ -1559,6 +1626,7 @@ export function PlannerView({
                       setDayStartTime(currentDay.id, startTime)
                     }
                     onLaunchNav={() => openInGoogleMaps(currentRouteStops)}
+                    onOpenStopNotes={openNotesForStop}
                     onSelectStop={setSelectedStopId}
                     stay={currentStay}
                     previousStay={previousStay}
@@ -1583,7 +1651,11 @@ export function PlannerView({
               </main>
             )}
 
-            <section className="relative flex min-h-[400px] flex-col bg-[#EEEAE1]">
+            <section
+              className={`relative flex min-h-[400px] flex-col ${
+                rightPanelMode === "notes" ? "bg-[#F8F5ED]" : "bg-[#EEEAE1]"
+              }`}
+            >
               <div className="absolute left-1/2 top-3 z-[500] grid -translate-x-1/2 grid-cols-2 rounded-[12px] border border-white/50 bg-[#E9E2D5]/90 p-1 shadow-sm backdrop-blur">
                 {(
                   [
@@ -1612,6 +1684,8 @@ export function PlannerView({
                     <RouteNotesPanel
                       days={showAllDays ? days : currentDay ? [currentDay] : []}
                       stays={stays}
+                      focusEntryId={notesFocus?.stopId}
+                      focusRequest={notesFocus?.request}
                       showDayHeadings={showAllDays}
                       onUpdateDayNotes={updateDayNotes}
                       onUpdateStopNotes={(stopId, notes) =>
@@ -1631,12 +1705,10 @@ export function PlannerView({
                   />
                 ) : (
                   <MapView
-                    stops={currentRouteStops}
+                    stops={currentMapStops}
                     viewportKey={`day-${currentDayId ?? "empty"}`}
                     stopColors={currentStopColors}
                     markerLabels={currentMarkerLabels}
-                    onStopMove={handleStopMove}
-                    nonDraggableIds={routeAnchorIds}
                     activeStopId={selectedStopId ?? undefined}
                     activityPins={selectedStopActivityPins}
                     showPois
@@ -1796,6 +1868,16 @@ function MapRouteSummary({
             </span>
           </div>
         ))}
+      </div>
+      <div className="flex items-center justify-end gap-3 border-t border-[#E7DFCE]/70 px-3 py-1.5 text-[8px] font-black uppercase tracking-[0.08em] text-[#8F8675]">
+        <span className="inline-flex items-center gap-1.5">
+          <span className="h-0.5 w-5 rounded-full bg-brand" />
+          Drive
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="w-5 border-t-2 border-dashed border-[#2E7A57]" />
+          Walk
+        </span>
       </div>
     </aside>
   );

@@ -4,6 +4,16 @@ export type RouteStop = {
   lat: number;
   lng: number;
   travelMode?: "driving" | "walking";
+  itemType?: "stop" | "activity";
+};
+
+export type RouteSegment = {
+  from: RouteStop;
+  to: RouteStop;
+  mode: "driving" | "walking";
+  /** Index in the original stop-to-stop leg list that owns this segment. */
+  logicalLegIndex: number;
+  isReturnToCar: boolean;
 };
 
 export type DrivingRoute = {
@@ -37,9 +47,75 @@ export const routeSignature = (stops: RouteStop[]) =>
   stops
     .map(
       (s) =>
-        `${s.lat.toFixed(6)},${s.lng.toFixed(6)},${s.travelMode ?? "driving"}`,
+        `${s.lat.toFixed(6)},${s.lng.toFixed(6)},${s.travelMode ?? "driving"},${s.itemType ?? "stop"}`,
     )
     .join("|");
+
+/**
+ * Expands the visible itinerary into physical travel segments. Walking
+ * activities form one excursion from the last place where the car was left;
+ * before the next drive (or at the end of the day), the route returns there.
+ */
+export function buildRouteSegments(stops: RouteStop[]): RouteSegment[] {
+  if (stops.length < 2) return [];
+
+  const segments: RouteSegment[] = [];
+  let carAnchor = stops[0];
+  let currentPosition = stops[0];
+
+  for (let index = 1; index < stops.length; index++) {
+    const destination = stops[index];
+    const isWalkingActivity =
+      destination.itemType === "activity" &&
+      destination.travelMode === "walking";
+
+    if (isWalkingActivity) {
+      segments.push({
+        from: currentPosition,
+        to: destination,
+        mode: "walking",
+        logicalLegIndex: index - 1,
+        isReturnToCar: false,
+      });
+      currentPosition = destination;
+      continue;
+    }
+
+    if (currentPosition !== carAnchor) {
+      segments.push({
+        from: currentPosition,
+        to: carAnchor,
+        mode: "walking",
+        logicalLegIndex: index - 1,
+        isReturnToCar: true,
+      });
+      currentPosition = carAnchor;
+    }
+
+    const mode = destination.travelMode ?? "driving";
+    segments.push({
+      from: currentPosition,
+      to: destination,
+      mode,
+      logicalLegIndex: index - 1,
+      isReturnToCar: false,
+    });
+    currentPosition = destination;
+    if (mode === "driving") carAnchor = destination;
+  }
+
+  if (currentPosition !== carAnchor) {
+    segments.push({
+      from: currentPosition,
+      to: carAnchor,
+      mode: "walking",
+      logicalLegIndex: stops.length - 2,
+      isReturnToCar: true,
+    });
+  }
+
+  return segments;
+}
 
 export const straightRouteForStops = (stops: RouteStop[]) =>
   stops.map((s) => [s.lat, s.lng] as [number, number]);
@@ -87,17 +163,51 @@ export async function fetchDrivingRoute(
   stops: RouteStop[],
   signal: AbortSignal,
 ): Promise<DrivingRoute | null> {
+  return fetchOsrmRoute(stops, signal, "driving");
+}
+
+/**
+ * Uses the OpenStreetMap.de OSRM foot profile so walking paths follow the
+ * pedestrian network instead of cutting across buildings in a straight line.
+ */
+export async function fetchWalkingRoute(
+  stops: RouteStop[],
+  signal: AbortSignal,
+): Promise<DrivingRoute | null> {
+  try {
+    const walkingRoute = await fetchOsrmRoute(stops, signal, "walking");
+    if (walkingRoute) return walkingRoute;
+  } catch (error) {
+    if (signal.aborted) throw error;
+  }
+
+  // The public foot router can occasionally be rate-limited or unavailable.
+  // A road-following shape is still more useful than a straight line; retain
+  // walking-speed estimates while using the driving router's geometry.
+  const roadRoute = await fetchOsrmRoute(stops, signal, "driving");
+  if (!roadRoute) return null;
+
+  return {
+    ...roadRoute,
+    durationMin: Math.max(1, Math.round((roadRoute.distanceKm / 5) * 60)),
+    legs: roadRoute.legs.map((leg) => ({
+      ...leg,
+      durationMin: Math.max(1, Math.round((leg.distanceKm / 5) * 60)),
+    })),
+  };
+}
+
+async function fetchOsrmRoute(
+  stops: RouteStop[],
+  signal: AbortSignal,
+  profile: "driving" | "walking",
+): Promise<DrivingRoute | null> {
   if (stops.length < 2) return null;
 
   const coordinates = stops.map((s) => `${s.lng},${s.lat}`).join(";");
-  const url = new URL(
-    `https://router.project-osrm.org/route/v1/driving/${coordinates}`,
-  );
-  url.searchParams.set("overview", "full");
-  url.searchParams.set("geometries", "geojson");
-  url.searchParams.set("steps", "false");
+  const params = new URLSearchParams({ profile, coordinates });
 
-  const res = await fetch(url.toString(), {
+  const res = await fetch(`/api/routing?${params.toString()}`, {
     headers: { Accept: "application/json" },
     signal,
   });

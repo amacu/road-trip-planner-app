@@ -5,8 +5,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { DayRouteMetric } from "@/features/fuel/lib/fuel-plan";
 import type { TripDayPlain } from "@/features/trips/lib/trip-view-model";
 import {
+  buildRouteSegments,
   fallbackRouteForStops,
   fetchDrivingRoute,
+  fetchWalkingRoute,
   routeSignature,
   walkingRouteForStops,
 } from "@/lib/integrations/routing";
@@ -36,12 +38,13 @@ export function useRouteMetrics(days: TripDayPlain[]) {
       if (day.stops.length < 2) continue;
       const signature = signatures.get(day.id)!;
       if (cacheRef.current[day.id]?.signature === signature) continue;
+      const segments = buildRouteSegments(day.stops);
 
       Promise.all(
-        day.stops.slice(1).map((destination, index) => {
-          const pair = [day.stops[index], destination];
-          return destination.travelMode === "walking"
-            ? Promise.resolve(walkingRouteForStops(pair))
+        segments.map((segment) => {
+          const pair = [segment.from, segment.to];
+          return segment.mode === "walking"
+            ? fetchWalkingRoute(pair, controller.signal)
             : fetchDrivingRoute(pair, controller.signal);
         }),
       )
@@ -63,6 +66,21 @@ export function useRouteMetrics(days: TripDayPlain[]) {
             (sum, route) => sum + route.durationMin,
             0,
           );
+          const legs = Array.from({ length: day.stops.length - 1 }, () => ({
+            distanceKm: 0,
+            durationMin: 0,
+          }));
+          validRoutes.forEach((route, index) => {
+            if (
+              index === segments.length - 1 &&
+              segments[index].isReturnToCar
+            ) {
+              return;
+            }
+            const leg = legs[segments[index].logicalLegIndex];
+            leg.distanceKm += route.distanceKm;
+            leg.durationMin += route.durationMin;
+          });
           setCache((current) => ({
             ...current,
             [day.id]: {
@@ -70,7 +88,7 @@ export function useRouteMetrics(days: TripDayPlain[]) {
               distanceKm,
               driveMin,
               path,
-              legs: validRoutes.flatMap((route) => route.legs),
+              legs,
             },
           }));
         })
@@ -87,27 +105,44 @@ export function useRouteMetrics(days: TripDayPlain[]) {
   return useMemo(() => {
     const result: Record<string, DayRouteMetric> = {};
     for (const day of days) {
-      const fallbackLegs = day.stops
-        .slice(1)
-        .map((destination, index) =>
-          destination.travelMode === "walking"
-            ? walkingRouteForStops([day.stops[index], destination])
-            : fallbackRouteForStops([day.stops[index], destination]),
-        );
-      const fallback = fallbackLegs.every(Boolean)
+      const segments = buildRouteSegments(day.stops);
+      const fallbackRoutes = segments.map((segment) =>
+        segment.mode === "walking"
+          ? walkingRouteForStops([segment.from, segment.to])
+          : fallbackRouteForStops([segment.from, segment.to]),
+      );
+      const fallback = fallbackRoutes.every(Boolean)
         ? {
-            distanceKm: fallbackLegs.reduce(
+            distanceKm: fallbackRoutes.reduce(
               (sum, route) => sum + (route?.distanceKm ?? 0),
               0,
             ),
-            durationMin: fallbackLegs.reduce(
+            durationMin: fallbackRoutes.reduce(
               (sum, route) => sum + (route?.durationMin ?? 0),
               0,
             ),
-            path: fallbackLegs.flatMap((route, index) =>
+            path: fallbackRoutes.flatMap((route, index) =>
               index === 0 ? (route?.path ?? []) : (route?.path.slice(1) ?? []),
             ),
-            legs: fallbackLegs.flatMap((route) => route?.legs ?? []),
+            legs: (() => {
+              const legs = Array.from(
+                { length: Math.max(0, day.stops.length - 1) },
+                () => ({ distanceKm: 0, durationMin: 0 }),
+              );
+              fallbackRoutes.forEach((route, index) => {
+                if (!route) return;
+                if (
+                  index === segments.length - 1 &&
+                  segments[index].isReturnToCar
+                ) {
+                  return;
+                }
+                const leg = legs[segments[index].logicalLegIndex];
+                leg.distanceKm += route.distanceKm;
+                leg.durationMin += route.durationMin;
+              });
+              return legs;
+            })(),
           }
         : null;
       result[day.id] =

@@ -1,7 +1,7 @@
 "use client";
 
 import { Check, Pencil, X } from "lucide-react";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import type {
   TripDayPlain,
@@ -11,6 +11,8 @@ import type {
 export function RouteNotesPanel({
   days,
   stays,
+  focusEntryId,
+  focusRequest,
   showDayHeadings = false,
   onUpdateDayNotes,
   onUpdateStopNotes,
@@ -18,11 +20,25 @@ export function RouteNotesPanel({
 }: {
   days: TripDayPlain[];
   stays: TripStayPlain[];
+  focusEntryId?: string;
+  focusRequest?: number;
   showDayHeadings?: boolean;
   onUpdateDayNotes: (dayId: string, notes: string) => Promise<boolean>;
   onUpdateStopNotes: (stopId: string, notes: string) => Promise<boolean>;
   onUpdateStayNotes: (stayId: string, notes: string) => Promise<boolean>;
 }) {
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!focusEntryId) return;
+    const frame = requestAnimationFrame(() => {
+      document
+        .getElementById(`route-note-${focusEntryId}`)
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [focusEntryId, focusRequest]);
+
   if (days.length === 0) {
     return (
       <div className="grid h-full place-items-center bg-[#F8F5ED] p-8 text-center">
@@ -34,7 +50,10 @@ export function RouteNotesPanel({
   }
 
   return (
-    <div className="h-full overflow-y-auto bg-[#F8F5ED] px-6 pb-28 pt-7 md:px-8">
+    <div
+      ref={scrollContainerRef}
+      className="h-full overflow-y-auto bg-[#F8F5ED] px-6 pb-28 pt-7 md:px-8"
+    >
       <div className="mx-auto max-w-[720px]">
         {days.map((day, dayIndex) => {
           const stay = stays.find((item) => item.afterDayId === day.id);
@@ -122,7 +141,13 @@ export function RouteNotesPanel({
                     return (
                       <li
                         key={entry.id}
-                        className="relative grid grid-cols-[40px_minmax(0,1fr)] gap-4 pb-8 last:pb-0"
+                        id={`route-note-${entry.id}`}
+                        className={
+                          "relative grid scroll-mt-24 grid-cols-[40px_minmax(0,1fr)] gap-4 rounded-[16px] pb-8 transition-colors last:pb-0 " +
+                          (focusEntryId === entry.id
+                            ? "-mx-3 bg-[#FBE7DD]/45 px-3 pt-3"
+                            : "")
+                        }
                       >
                         {index < entries.length - 1 && (
                           <span className="absolute left-[19px] top-9 h-[calc(100%-28px)] w-px bg-[#DDD3BF]" />

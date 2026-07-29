@@ -8,6 +8,7 @@ import {
   Coffee,
   Landmark,
   MapPin,
+  NotebookPen,
   Mountain,
   Plus,
   ShoppingBag,
@@ -50,12 +51,14 @@ function hhmmToMinutes(value: string): number | null {
 export function StopCard({
   index,
   stop,
+  hiddenWalkingExcursionCount = 0,
+  onExpandWalkingExcursions,
+  isWalkingExcursion = false,
+  showDriveSpine = false,
   isFirst = false,
   isLast = false,
   arrivalTime = null,
   departureTime = null,
-  dayStartTime,
-  onSetDayStartTime,
   showSchedule = true,
   headerAction,
   onUpdate,
@@ -66,10 +69,15 @@ export function StopCard({
   onReorderActivities: _onReorderActivities,
   onMoveUp,
   onMoveDown,
+  onOpenNotes,
   onSelect,
 }: {
   index: number;
   stop: StopPoint;
+  hiddenWalkingExcursionCount?: number;
+  onExpandWalkingExcursions?: () => void;
+  isWalkingExcursion?: boolean;
+  showDriveSpine?: boolean;
   isFirst?: boolean;
   isLast?: boolean;
   arrivalTime?: string | null;
@@ -91,15 +99,14 @@ export function StopCard({
   onReorderActivities: (orderedActivityIds: string[]) => void;
   onMoveUp: () => void;
   onMoveDown: () => void;
+  onOpenNotes?: () => void;
   /** Called when this stop is expanded (selected) — lets the map recenter on it and show its activities. */
   onSelect?: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
 
   function toggleExpanded() {
-    const next = !expanded;
-    setExpanded(next);
-    if (next) onSelect?.();
+    setExpanded((current) => !current);
   }
 
   const isActivity = stop.itemType === "activity";
@@ -107,8 +114,8 @@ export function StopCard({
   const scheduleLabel = !showSchedule
     ? null
     : isFirst
-      ? departureTime
-        ? `Departs ${departureTime}`
+      ? arrivalTime
+        ? `${arrivalTime}${departureTime ? ` – ${departureTime}` : ""}`
         : "Set start time"
       : isLast
         ? arrivalTime
@@ -117,15 +124,34 @@ export function StopCard({
         : arrivalTime
           ? `${arrivalTime}${departureTime ? ` – ${departureTime}` : ""}`
           : "Set start time";
-  const scheduleIsSet = Boolean(
-    isFirst ? departureTime : isLast ? arrivalTime : arrivalTime,
-  );
+  const scheduleIsSet = Boolean(arrivalTime);
 
   return (
-    <li className="group relative">
+    <li
+      className={cn(
+        "group relative transition-[margin] duration-200",
+        isWalkingExcursion && "ml-16",
+        hiddenWalkingExcursionCount > 0 && "mb-3",
+        showDriveSpine &&
+          "before:absolute before:bottom-0 before:left-[-46px] before:top-0 before:border-l before:border-dashed before:border-[#D1C7B2]",
+      )}
+    >
+      {hiddenWalkingExcursionCount > 0 && (
+        <button
+          type="button"
+          onClick={onExpandWalkingExcursions}
+          className="absolute -bottom-3 left-16 right-0 h-6 rounded-b-[16px] border border-t-0 border-[#CFC1E5] bg-[#EAE4F3] shadow-[0_7px_15px_rgba(124,92,191,0.09)] transition-colors hover:border-[#B9A6D8] hover:bg-[#E3DAF0] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9B82C8]"
+          title={`Show ${hiddenWalkingExcursionCount} walking ${
+            hiddenWalkingExcursionCount === 1 ? "excursion" : "excursions"
+          }`}
+          aria-label={`Show ${hiddenWalkingExcursionCount} walking ${
+            hiddenWalkingExcursionCount === 1 ? "excursion" : "excursions"
+          }`}
+        />
+      )}
       <div
         className={cn(
-          "relative flex flex-col overflow-hidden rounded-[18px] border px-3.5 py-3 shadow-[0_5px_16px_rgba(22,19,13,0.04)] transition-all duration-200",
+          "relative z-[1] flex flex-col overflow-hidden rounded-[18px] border px-3.5 py-3 shadow-[0_5px_16px_rgba(22,19,13,0.04)] transition-all duration-200",
           isActivity
             ? expanded
               ? "border-[#A88DDA] bg-[#F0ECF6] shadow-[0_10px_24px_rgba(124,92,191,0.12)]"
@@ -184,7 +210,7 @@ export function StopCard({
           <div className="flex min-w-0 flex-1 items-start justify-between gap-2">
             <button
               type="button"
-              onClick={toggleExpanded}
+              onClick={onSelect}
               className="min-w-0 flex-1 text-left"
             >
               <span className="flex min-w-0 items-center gap-1.5">
@@ -229,6 +255,17 @@ export function StopCard({
 
             <div className="flex shrink-0 items-center gap-0.5">
               {headerAction}
+              {onOpenNotes && (
+                <button
+                  type="button"
+                  onClick={onOpenNotes}
+                  className="grid size-7 place-items-center rounded-[8px] text-[#7A7264] opacity-100 transition-all hover:bg-[#EEE7DA] hover:text-brand focus:opacity-100 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100"
+                  title={`Open notes for ${stop.name}`}
+                  aria-label={`Open notes for ${stop.name}`}
+                >
+                  <NotebookPen className="size-3.5" />
+                </button>
+              )}
               <button
                 type="button"
                 onClick={toggleExpanded}
@@ -243,77 +280,67 @@ export function StopCard({
                   )}
                 />
               </button>
-              <button
-                type="button"
-                onClick={onRemove}
-                className="grid size-7 place-items-center rounded-[8px] text-[#BB6A4F] opacity-100 transition-all hover:bg-[#FBE7DD] hover:text-destructive focus:opacity-100 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100"
-                title={`Delete ${stop.name}`}
-                aria-label={`Delete ${stop.name}`}
-              >
-                <Trash2 className="size-4" />
-              </button>
             </div>
           </div>
         </div>
 
         {expanded && (
-          <div
-            className={cn(
-              "mt-3 flex flex-wrap items-center gap-x-2 gap-y-1.5 rounded-[11px] px-3 py-2.5 font-mono text-xs font-semibold text-[#16130D]",
-              isActivity ? "bg-[#EAE4F2]" : "bg-[#EEE7DA]",
-            )}
-          >
-            {isFirst && onSetDayStartTime ? (
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-[#D8CEB8]/70 pt-3 font-mono text-[11px] font-semibold text-[#5F594D]">
+            <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5">
+              <div className="flex rounded-[8px] bg-[#EEE7DA] p-0.5 font-sans">
+                {(
+                  [
+                    ["stop", "Stop", MapPin],
+                    ["activity", "Activity", Landmark],
+                  ] as const
+                ).map(([type, label, Icon]) => (
+                  <button
+                    key={type}
+                    type="button"
+                    disabled={stop.itemType === type}
+                    onClick={() => onUpdate({ itemType: type })}
+                    className={cn(
+                      "inline-flex h-6 items-center gap-1 rounded-[6px] px-1.5 text-[9.5px] font-bold transition-colors",
+                      stop.itemType === type
+                        ? type === "activity"
+                          ? "bg-[#7C5CBF] text-white shadow-sm"
+                          : "bg-brand text-brand-foreground shadow-sm"
+                        : "text-[#7A7264] hover:text-foreground",
+                    )}
+                    aria-pressed={stop.itemType === type}
+                  >
+                    <Icon className="size-3" />
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <span
+                className="hidden h-4 w-px bg-[#D8CEB8] sm:block"
+                aria-hidden
+              />
               <span className="flex items-center gap-1.5">
                 <span className="font-sans font-normal text-[#a89f88]">
-                  Starts
+                  Visit
                 </span>
                 <PlainTimeInput
-                  value={dayStartTime ?? ""}
-                  onChange={onSetDayStartTime}
+                  value={minutesToHHMM(stop.visitDurationMin)}
+                  onChange={(value) =>
+                    onUpdate({ visitDurationMin: hhmmToMinutes(value) })
+                  }
                   compact
                   plain
                 />
               </span>
-            ) : (
-              arrivalTime && (
-                <span>
-                  <span className="font-sans font-normal text-[#a89f88]">
-                    Arrives
-                  </span>{" "}
-                  {arrivalTime}
-                </span>
-              )
-            )}
-            {!isFirst && (
-              <>
-                <span className="text-[#cbc1a9]">·</span>
-                <span className="flex items-center gap-1.5">
-                  <span className="font-sans font-normal text-[#a89f88]">
-                    Visit
-                  </span>
-                  <PlainTimeInput
-                    value={minutesToHHMM(stop.visitDurationMin)}
-                    onChange={(value) =>
-                      onUpdate({ visitDurationMin: hhmmToMinutes(value) })
-                    }
-                    compact
-                    plain
-                  />
-                </span>
-              </>
-            )}
-            {departureTime && (
-              <>
-                <span className="text-[#cbc1a9]">·</span>
-                <span>
-                  <span className="font-sans font-normal text-[#a89f88]">
-                    Departs
-                  </span>{" "}
-                  {departureTime}
-                </span>
-              </>
-            )}
+            </div>
+            <button
+              type="button"
+              onClick={onRemove}
+              className="ml-auto grid size-7 shrink-0 place-items-center rounded-[8px] text-[#A85A43] transition-colors hover:bg-[#FBE7DD] hover:text-destructive"
+              title={`Delete ${stop.name}`}
+              aria-label={`Delete ${stop.name}`}
+            >
+              <Trash2 className="size-3.5" />
+            </button>
           </div>
         )}
       </div>
