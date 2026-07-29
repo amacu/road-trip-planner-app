@@ -133,3 +133,54 @@ export async function updateTripPackingCategories(
 
   return categories;
 }
+
+export async function importTripPackingItems(
+  tripId: string,
+  userId: string,
+  input: {
+    items: TripPackingItemInput[];
+    categories: PackingCategory[];
+    replaceExisting: boolean;
+  },
+) {
+  const trip = await prisma.trip.findFirst({
+    where: { id: tripId, ...tripWriteAccessWhere(userId) },
+    select: {
+      id: true,
+      packingItems: {
+        orderBy: { itemOrder: "desc" },
+        take: 1,
+        select: { itemOrder: true },
+      },
+    },
+  });
+  if (!trip) return null;
+
+  return prisma.$transaction(async (transaction) => {
+    if (input.replaceExisting) {
+      await transaction.tripPackingItem.deleteMany({
+        where: { tripId, acquisition: { not: "buy" } },
+      });
+    }
+
+    await transaction.trip.update({
+      where: { id: tripId },
+      data: { packingCategories: input.categories as Prisma.InputJsonValue },
+    });
+
+    const firstOrder = input.replaceExisting
+      ? 0
+      : (trip.packingItems[0]?.itemOrder ?? -1) + 1;
+    const items = await transaction.tripPackingItem.createManyAndReturn({
+      data: input.items.map((item, index) => ({
+        tripId,
+        ...packingItemData(item),
+        name: item.name.trim(),
+        category: item.category.trim(),
+        itemOrder: firstOrder + index,
+      })),
+    });
+
+    return { items, categories: input.categories };
+  });
+}

@@ -12,6 +12,7 @@ import {
   Plus,
   Settings2,
   ShoppingCart,
+  Sparkles,
   Trash2,
   X,
 } from "lucide-react";
@@ -26,6 +27,7 @@ import {
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
 
+import { AiPackingImportDialog } from "@/features/trip-packing/components/ai-packing-import-dialog";
 import type { TripPackingItemPlain } from "@/features/trips/lib/trip-view-model";
 import {
   PACKING_CATEGORIES,
@@ -45,6 +47,13 @@ type PackingDashboardProps = {
   ) => Promise<boolean>;
   onDelete: (itemId: string) => Promise<boolean>;
   onUpdateCategories: (categories: PackingCategory[]) => Promise<boolean>;
+  tripContext?: string;
+  onAiImport?: (
+    items: TripPackingItemInput[],
+    categories: Array<{ name: string; color: string }>,
+    replaceExisting: boolean,
+    allowNewCategories: boolean,
+  ) => Promise<boolean>;
 };
 
 const EMPTY_DRAFT: TripPackingItemInput = {
@@ -71,10 +80,13 @@ export function PackingDashboard({
   onUpdate,
   onDelete,
   onUpdateCategories,
+  tripContext,
+  onAiImport,
 }: PackingDashboardProps) {
   const [draft, setDraft] = useState<TripPackingItemInput>(EMPTY_DRAFT);
   const [adding, setAdding] = useState<"shopping" | "packing" | null>(null);
   const [managingCategories, setManagingCategories] = useState(false);
+  const [aiImportOpen, setAiImportOpen] = useState(false);
   const [shoppingCollapsed, setShoppingCollapsed] = useState(false);
   const [packingCollapsed, setPackingCollapsed] = useState(false);
   const [hidePurchased, setHidePurchased] = useState(false);
@@ -90,43 +102,70 @@ export function PackingDashboard({
     [categoryConfigs, items],
   );
 
-  const shoppingItems = items.filter((item) => item.acquisition === "buy");
-  const packingItems = items.filter((item) => item.acquisition !== "buy");
-  const purchasedCount = items.filter(
-    (item) => item.acquisition === "buy" && item.isPurchased,
-  ).length;
-  const totalShoppingCount = shoppingItems.length;
-  const shoppingBudget = items
-    .filter((item) => item.acquisition === "buy")
-    .reduce((sum, item) => sum + (item.price ?? 0) * item.quantity, 0);
-  const remainingBudget = shoppingItems
-    .filter((item) => !item.isPurchased)
-    .reduce((sum, item) => sum + (item.price ?? 0) * item.quantity, 0);
-  const shoppingProgress = totalShoppingCount
-    ? Math.round((purchasedCount / totalShoppingCount) * 100)
-    : 0;
-  const packedCount = packingItems.filter((item) => item.isPacked).length;
-  const packingProgress = packingItems.length
-    ? Math.round((packedCount / packingItems.length) * 100)
-    : 0;
-  const categoryOrder = categoryConfigs.map((category) => category.name);
-  const categoryColors = new Map(
-    categoryConfigs.map((category) => [category.name, category.color]),
-  );
-  const visibleShoppingItems = hidePurchased
-    ? shoppingItems.filter((item) => !item.isPurchased)
-    : shoppingItems;
-  const visiblePackingItems = hidePacked
-    ? packingItems.filter((item) => !item.isPacked)
-    : packingItems;
-  const shoppingGroups = groupItemsByCategory(
+  const {
+    shoppingItems,
+    packingItems,
+    purchasedCount,
+    totalShoppingCount,
+    shoppingBudget,
+    remainingBudget,
+    shoppingProgress,
+    packedCount,
+    packingProgress,
+    categoryColors,
     visibleShoppingItems,
-    categoryOrder,
-  );
-  const packingGroups = groupItemsByCategory(
     visiblePackingItems,
-    categoryOrder,
-  );
+    shoppingGroups,
+    packingGroups,
+  } = useMemo(() => {
+    const shoppingItems = items.filter((item) => item.acquisition === "buy");
+    const packingItems = items.filter((item) => item.acquisition !== "buy");
+    const purchasedCount = shoppingItems.filter(
+      (item) => item.isPurchased,
+    ).length;
+    const totalShoppingCount = shoppingItems.length;
+    const shoppingBudget = shoppingItems.reduce(
+      (sum, item) => sum + (item.price ?? 0) * item.quantity,
+      0,
+    );
+    const remainingBudget = shoppingItems
+      .filter((item) => !item.isPurchased)
+      .reduce((sum, item) => sum + (item.price ?? 0) * item.quantity, 0);
+    const shoppingProgress = totalShoppingCount
+      ? Math.round((purchasedCount / totalShoppingCount) * 100)
+      : 0;
+    const packedCount = packingItems.filter((item) => item.isPacked).length;
+    const packingProgress = packingItems.length
+      ? Math.round((packedCount / packingItems.length) * 100)
+      : 0;
+    const categoryOrder = categoryConfigs.map((category) => category.name);
+    const categoryColors = new Map(
+      categoryConfigs.map((category) => [category.name, category.color]),
+    );
+    const visibleShoppingItems = hidePurchased
+      ? shoppingItems.filter((item) => !item.isPurchased)
+      : shoppingItems;
+    const visiblePackingItems = hidePacked
+      ? packingItems.filter((item) => !item.isPacked)
+      : packingItems;
+
+    return {
+      shoppingItems,
+      packingItems,
+      purchasedCount,
+      totalShoppingCount,
+      shoppingBudget,
+      remainingBudget,
+      shoppingProgress,
+      packedCount,
+      packingProgress,
+      categoryColors,
+      visibleShoppingItems,
+      visiblePackingItems,
+      shoppingGroups: groupItemsByCategory(visibleShoppingItems, categoryOrder),
+      packingGroups: groupItemsByCategory(visiblePackingItems, categoryOrder),
+    };
+  }, [items, categoryConfigs, hidePurchased, hidePacked]);
 
   function submitDraft(event: FormEvent) {
     event.preventDefault();
@@ -200,6 +239,7 @@ export function PackingDashboard({
           adding={adding === "shopping"}
           onAdd={() => startAdding("shopping")}
           onManageCategories={() => setManagingCategories(true)}
+          onAi={undefined}
           collapsed={shoppingCollapsed}
           onToggleCollapsed={() => setShoppingCollapsed((current) => !current)}
         />
@@ -345,6 +385,9 @@ export function PackingDashboard({
           adding={adding === "packing"}
           onAdd={() => startAdding("packing")}
           onManageCategories={() => setManagingCategories(true)}
+          onAi={
+            tripContext && onAiImport ? () => setAiImportOpen(true) : undefined
+          }
           collapsed={packingCollapsed}
           onToggleCollapsed={() => setPackingCollapsed((current) => !current)}
         />
@@ -498,6 +541,23 @@ export function PackingDashboard({
           categories={categoryConfigs}
           onClose={() => setManagingCategories(false)}
           onSave={onUpdateCategories}
+        />
+      )}
+      {tripContext && onAiImport && (
+        <AiPackingImportDialog
+          open={aiImportOpen}
+          onOpenChange={setAiImportOpen}
+          tripContext={tripContext}
+          items={items}
+          categories={categoryConfigs}
+          onImport={(plan, replaceExisting, allowNewCategories) =>
+            onAiImport(
+              plan.items,
+              plan.categories,
+              replaceExisting,
+              allowNewCategories,
+            )
+          }
         />
       )}
     </section>
@@ -781,13 +841,6 @@ function ShoppingCard({
             onCommit={(quantity) => void onUpdate({ quantity })}
           />
         </div>
-        <div className="w-[72px] shrink-0">
-          <PriceInput
-            value={item.price}
-            disabled={item.isPurchased}
-            onCommit={(price) => void onUpdate({ price })}
-          />
-        </div>
         <button
           type="button"
           onClick={() => setDetailsOpen((current) => !current)}
@@ -804,27 +857,22 @@ function ShoppingCard({
       </div>
 
       {detailsOpen && (
-        <div className="mt-2 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-1.5 border-t border-[#E9E0CF] pt-2">
-          <div className="grid min-w-0 grid-cols-[110px_minmax(0,1fr)] gap-1">
-            <InlineSelect
-              value={item.category}
-              disabled={item.isPurchased}
-              ariaLabel="Category"
-              options={categories.map((value) => ({ value, label: value }))}
-              onChange={(category) => void onUpdate({ category })}
-              className="px-1.5 text-center text-[10px] font-bold"
-              style={categoryInputStyle(categoryColor)}
-            />
-            <InlineText
-              value={item.notes ?? ""}
-              disabled={item.isPurchased}
-              ariaLabel="Note"
-              placeholder="Add note"
-              className="w-full px-1 text-[10px] text-[#7a7264]"
-              onCommit={(notes) => void onUpdate({ notes })}
-            />
-          </div>
-          <div className="flex items-center">
+        <div className="mt-2 grid min-w-0 grid-cols-[72px_minmax(0,1fr)_auto] items-center gap-1.5 border-t border-[#E9E0CF] pt-2">
+          <PriceInput
+            value={item.price}
+            disabled={item.isPurchased}
+            onCommit={(price) => void onUpdate({ price })}
+          />
+          <InlineSelect
+            value={item.category}
+            disabled={item.isPurchased}
+            ariaLabel="Category"
+            options={categories.map((value) => ({ value, label: value }))}
+            onChange={(category) => void onUpdate({ category })}
+            className="px-1.5 text-center text-[10px] font-bold"
+            style={categoryInputStyle(categoryColor)}
+          />
+          <div className="row-span-2 flex items-center">
             <ProductLinksButton
               links={item.productLinks}
               locked={item.isPurchased}
@@ -832,6 +880,14 @@ function ShoppingCard({
             />
             {!item.isPurchased && <RowActions onDelete={onDelete} />}
           </div>
+          <InlineText
+            value={item.notes ?? ""}
+            disabled={item.isPurchased}
+            ariaLabel="Note"
+            placeholder="Add note"
+            className="col-span-2 w-full px-1 text-[10px] text-[#7a7264]"
+            onCommit={(notes) => void onUpdate({ notes })}
+          />
         </div>
       )}
     </div>
@@ -1653,6 +1709,7 @@ function ListHeading({
   adding,
   onAdd,
   onManageCategories,
+  onAi,
   collapsed,
   onToggleCollapsed,
 }: {
@@ -1663,6 +1720,7 @@ function ListHeading({
   adding: boolean;
   onAdd: () => void;
   onManageCategories: () => void;
+  onAi?: () => void;
   collapsed: boolean;
   onToggleCollapsed: () => void;
 }) {
@@ -1703,6 +1761,17 @@ function ListHeading({
             }`}
           />
         </button>
+        {onAi && (
+          <button
+            type="button"
+            onClick={onAi}
+            aria-label="Create packing list with AI"
+            title="Create packing list with AI"
+            className="grid size-8 place-items-center rounded-[10px] border border-[#D8CEB8] bg-transparent text-[#8A5F4D] transition-colors hover:border-[#E4562A]/40 hover:bg-[#FBE7DD] hover:text-[#C6532D] md:size-10 md:rounded-[13px]"
+          >
+            <Sparkles className="size-4" />
+          </button>
+        )}
         <button
           type="button"
           onClick={onManageCategories}

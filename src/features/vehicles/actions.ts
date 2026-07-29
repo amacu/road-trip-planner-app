@@ -2,14 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 
-import { requireAuthenticatedUser, requireUser } from "@/lib/auth/guards";
+import { requireUser } from "@/lib/auth/guards";
 import { type ActionResult } from "@/lib/action-result";
-import {
-  createVehicle,
-  deleteVehicle,
-  getVehicles,
-  updateVehicle,
-} from "@/lib/db/vehicles";
+import { createVehicle, deleteVehicle, updateVehicle } from "@/lib/db/vehicles";
 import {
   toVehiclePlain,
   type VehiclePlain,
@@ -18,11 +13,6 @@ import {
   vehicleCreateSchema,
   vehicleUpdateSchema,
 } from "@/lib/validators/vehicle";
-
-export async function getMyVehiclesAction() {
-  const user = await requireAuthenticatedUser();
-  return getVehicles(user.id);
-}
 
 export async function createVehicleAction(
   input: unknown,

@@ -60,6 +60,4 @@ export const aiDayStopsImportSchema = z.object({
     .max(20),
 });
 
-export type TripStopCreateInput = z.infer<typeof tripStopCreateSchema>;
-export type TripStopUpdateInput = z.infer<typeof tripStopUpdateSchema>;
 export type AiDayStopsImportInput = z.infer<typeof aiDayStopsImportSchema>;

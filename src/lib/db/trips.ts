@@ -33,28 +33,6 @@ const tripInclude = {
   },
 } satisfies Prisma.TripInclude;
 
-export async function getTrips(userId: string) {
-  return prisma.trip.findMany({
-    where: tripAccessWhere(userId),
-    orderBy: { updatedAt: "desc" },
-    include: {
-      vehicle: true,
-      members: { orderBy: { createdAt: "asc" }, include: { user: true } },
-      days: {
-        orderBy: { dayNumber: "asc" },
-        include: {
-          stops: {
-            orderBy: { stopOrder: "asc" },
-            include: {
-              activities: { orderBy: { activityOrder: "asc" } },
-            },
-          },
-        },
-      },
-    },
-  });
-}
-
 export async function getLatestTripId(userId: string) {
   return prisma.trip.findFirst({
     where: tripAccessWhere(userId),
@@ -130,15 +108,6 @@ export async function updateTrip(
     },
     select: { id: true, name: true, heroImageUrl: true },
   });
-}
-
-export async function canAccessTrip(tripId: string, userId: string) {
-  return Boolean(
-    await prisma.trip.findFirst({
-      where: { id: tripId, ...tripAccessWhere(userId) },
-      select: { id: true },
-    }),
-  );
 }
 
 export async function canWriteTrip(tripId: string, userId: string) {

@@ -31,6 +31,3 @@ export const reorderTripDaysSchema = z.object({
     .max(500)
     .refine((ids) => new Set(ids).size === ids.length, "Duplicate day IDs."),
 });
-
-export type TripDayCreateInput = z.infer<typeof tripDayCreateSchema>;
-export type TripDayUpdateInput = z.infer<typeof tripDayUpdateSchema>;

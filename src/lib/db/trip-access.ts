@@ -6,10 +6,6 @@ export function tripAccessWhere(userId: string): Prisma.TripWhereInput {
   };
 }
 
-export function nestedTripAccessWhere(userId: string): Prisma.TripWhereInput {
-  return tripAccessWhere(userId);
-}
-
 export function tripWriteAccessWhere(userId: string): Prisma.TripWhereInput {
   return {
     OR: [{ userId }, { members: { some: { userId, role: "editor" } } }],

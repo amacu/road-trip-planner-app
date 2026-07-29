@@ -29,6 +29,3 @@ export const tripMemberRoleUpdateSchema = z.object({
 
 export type TripCreateInput = z.infer<typeof tripCreateSchema>;
 export type TripUpdateInput = z.infer<typeof tripUpdateSchema>;
-export type TripMemberRoleUpdateInput = z.infer<
-  typeof tripMemberRoleUpdateSchema
->;

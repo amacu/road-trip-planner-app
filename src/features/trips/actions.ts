@@ -3,15 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
-import { requireAuthenticatedUser, requireUser } from "@/lib/auth/guards";
+import { requireUser } from "@/lib/auth/guards";
 import { type ActionResult } from "@/lib/action-result";
 import {
   addTripMember,
   canWriteTrip,
   createTrip,
   deleteTrip,
-  getTripSwitcherItems,
-  getTripById,
   removeTripMember,
   updateTrip,
   updateTripMemberRole,
@@ -46,16 +44,6 @@ const HERO_IMAGE_EXTENSIONS: Record<string, string> = {
 const tripMemberCreateSchema = z.object({
   identifier: z.string().trim().min(1, "Enter an email or username."),
 });
-
-export async function getMyTripsAction() {
-  const user = await requireAuthenticatedUser();
-  return getTripSwitcherItems(user.id);
-}
-
-export async function getMyTripAction(tripId: string) {
-  const user = await requireAuthenticatedUser();
-  return getTripById(tripId, user.id);
-}
 
 export async function createTripAction(
   input: unknown,

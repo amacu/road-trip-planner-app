@@ -13,18 +13,25 @@ import {
   Route as RouteIcon,
   Sparkles,
 } from "lucide-react";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { flushSync } from "react-dom";
 import { toast } from "sonner";
 
 import { CollapsedSidebar } from "@/components/layout/collapsed-sidebar";
 import { LogoMark } from "@/components/shared/app-logo";
-import { FuelDashboard } from "@/features/fuel/components/fuel-dashboard";
-import { HomeScreen } from "@/features/home/components/home-screen";
 import {
   createTripPackingItemAction,
   deleteTripPackingItemAction,
+  importAiPackingListAction,
   updateTripPackingCategoriesAction,
   updateTripPackingItemAction,
 } from "@/features/trip-packing/actions";
@@ -33,22 +40,12 @@ import {
   estimateFuelCostPln,
 } from "@/features/fuel/lib/fuel-plan";
 import {
-  createTripActivityAction,
-  deleteTripActivityAction,
-  reorderTripActivitiesAction,
-  updateTripActivityAction,
-} from "@/features/trip-activities/actions";
-import {
   createTripDayAction,
   deleteTripDayAction,
   reorderTripDaysAction,
   updateTripDayAction,
 } from "@/features/trip-days/actions";
-import {
-  DayPanel,
-  type AiDayRouteItem,
-} from "@/features/trip-days/components/day-panel";
-import { RouteNotesPanel } from "@/features/trip-days/components/route-notes-panel";
+import type { AiDayRouteItem } from "@/features/trip-days/components/day-panel";
 import {
   deleteTripStayAction,
   saveTripStayAction,
@@ -61,19 +58,13 @@ import {
   reorderTripStopsAction,
   updateTripStopAction,
 } from "@/features/trip-stops/actions";
-import { MapView } from "@/features/trip-stops/components/map-view";
 import { DayListCard } from "@/features/trips/components/day-list-card";
-import {
-  AiTripImportDialog,
-  type AiTripDay,
-} from "@/features/trips/components/ai-trip-import-dialog";
+import type { AiTripDay } from "@/features/trips/components/ai-trip-import-dialog";
 import { NewTripDialog } from "@/features/trips/components/new-trip-dialog";
-import { OverviewView } from "@/features/trips/components/overview-view";
 import { TripSummaryCard } from "@/features/trips/components/trip-summary-card";
 import { deleteTripAction, updateTripAction } from "@/features/trips/actions";
 import type {
   StopPoint,
-  TripActivityPlain,
   TripPackingItemPlain,
   TripPlain,
   TripStayPlain,
@@ -83,6 +74,7 @@ import { useRouteMetrics } from "@/features/trips/hooks/use-route-metrics";
 import type { GeocodeResult } from "@/lib/integrations/geocode";
 import type { FuelCountryPrice } from "@/lib/integrations/fuel-prices";
 import { openInGoogleMaps } from "@/lib/integrations/google-maps";
+import { buildPackingTripContext } from "@/features/trips/lib/trip-export";
 import type { TripUpdateInput } from "@/lib/validators/trip";
 import type { TripStayInput } from "@/lib/validators/trip-stay";
 import type {
@@ -91,6 +83,44 @@ import type {
   TripPackingItemUpdateInput,
 } from "@/lib/validators/trip-packing-item";
 import { cn, randomId } from "@/lib/utils";
+
+const HomeScreen = dynamic(() =>
+  import("@/features/home/components/home-screen").then(
+    (module) => module.HomeScreen,
+  ),
+);
+const DayPanel = dynamic(() =>
+  import("@/features/trip-days/components/day-panel").then(
+    (module) => module.DayPanel,
+  ),
+);
+const RouteNotesPanel = dynamic(() =>
+  import("@/features/trip-days/components/route-notes-panel").then(
+    (module) => module.RouteNotesPanel,
+  ),
+);
+const OverviewView = dynamic(() =>
+  import("@/features/trips/components/overview-view").then(
+    (module) => module.OverviewView,
+  ),
+);
+const FuelDashboard = dynamic(() =>
+  import("@/features/fuel/components/fuel-dashboard").then(
+    (module) => module.FuelDashboard,
+  ),
+);
+const MapView = dynamic(
+  () =>
+    import("@/features/trip-stops/components/map-view").then(
+      (module) => module.MapView,
+    ),
+  { ssr: false },
+);
+const AiTripImportDialog = dynamic(() =>
+  import("@/features/trips/components/ai-trip-import-dialog").then(
+    (module) => module.AiTripImportDialog,
+  ),
+);
 
 type TabKey = "overview" | "planner" | "fuel";
 type ViewKey = TabKey | "landing";
@@ -139,6 +169,16 @@ function formatDayDateLabel(date: string | null) {
     month: "short",
     timeZone: "UTC",
   }).format(new Date(`${date}T00:00:00Z`));
+}
+
+function formatWeekdayLabel(date: string | null) {
+  if (!date) return null;
+  return new Intl.DateTimeFormat("en", {
+    weekday: "short",
+    timeZone: "UTC",
+  })
+    .format(new Date(`${date}T00:00:00Z`))
+    .toUpperCase();
 }
 
 function stayAsStop(stay: TripStayPlain, id: string): StopPoint {
@@ -272,7 +312,6 @@ export function PlannerView({
   >("itinerary");
   const [fuelPrices] = useState<FuelCountryPrice[]>(initialFuelPrices);
   const discardedOptimisticStopIds = useRef(new Set<string>());
-  const discardedOptimisticActivityIds = useRef(new Set<string>());
 
   const isOwner = trip.ownerId === currentUserId;
   const currentDay = days.find((d) => d.id === activeDayId) ?? days[0];
@@ -428,13 +467,18 @@ export function PlannerView({
   const endStayLeg = hasEndStayAnchor
     ? currentMetric?.legs[regularLegOffset + currentStops.length - 1]
     : undefined;
-  const tripTotalKm = days.reduce(
-    (sum, day) => sum + (dayMetrics[day.id]?.distanceKm ?? 0),
-    0,
-  );
-  const tripTotalMin = days.reduce(
-    (sum, day) => sum + (dayMetrics[day.id]?.driveMin ?? 0),
-    0,
+  const { tripTotalKm, tripTotalMin } = useMemo(
+    () => ({
+      tripTotalKm: days.reduce(
+        (sum, day) => sum + (dayMetrics[day.id]?.distanceKm ?? 0),
+        0,
+      ),
+      tripTotalMin: days.reduce(
+        (sum, day) => sum + (dayMetrics[day.id]?.driveMin ?? 0),
+        0,
+      ),
+    }),
+    [days, dayMetrics],
   );
   const tripFuelPln = estimateFuelCostPln(
     tripTotalKm,
@@ -553,11 +597,7 @@ export function PlannerView({
     if (!pending) return;
     pendingPackingUpdates.current.delete(itemId);
 
-    const result = await updateTripPackingItemAction(
-      trip.id,
-      itemId,
-      pending.patch,
-    );
+    const result = await updateTripPackingItemAction(itemId, pending.patch);
     const newerPending = pendingPackingUpdates.current.get(itemId);
     const settledFields = Object.keys(pending.patch).filter(
       (field) => !(field in (newerPending?.patch ?? {})),
@@ -590,7 +630,7 @@ export function PlannerView({
     const withoutItem = previous.filter((item) => item.id !== itemId);
     packingItemsRef.current = withoutItem;
     setPackingItems(withoutItem);
-    const result = await deleteTripPackingItemAction(trip.id, itemId);
+    const result = await deleteTripPackingItemAction(itemId);
     if (!result.success) {
       packingItemsRef.current = previous;
       setPackingItems(previous);
@@ -631,6 +671,61 @@ export function PlannerView({
     setPackingItems(nextItems);
     setPackingCategories(result.data);
     toast.success("Categories updated.");
+    return true;
+  }
+
+  async function importAiPackingList(
+    importedItems: TripPackingItemInput[],
+    newCategories: Array<{ name: string; color: string }>,
+    replaceExisting: boolean,
+    allowNewCategories: boolean,
+  ) {
+    const existingKeys = new Set(
+      packingCategories.map((category) => category.name.toLocaleLowerCase()),
+    );
+    const additions = allowNewCategories
+      ? newCategories
+          .filter(
+            (category) => !existingKeys.has(category.name.toLocaleLowerCase()),
+          )
+          .map((category) => ({
+            id: randomId(),
+            name: category.name,
+            color: category.color,
+          }))
+      : [];
+    const nextCategories = [...packingCategories, ...additions];
+    if (nextCategories.length > 30) {
+      toast.error("A trip can have at most 30 packing categories.");
+      return false;
+    }
+
+    const result = await importAiPackingListAction(trip.id, {
+      items: importedItems,
+      categories: nextCategories,
+      replaceExisting,
+    });
+    if (!result.success) {
+      toast.error(result.error);
+      return false;
+    }
+
+    const nextItems = replaceExisting
+      ? [
+          ...packingItemsRef.current.filter(
+            (item) => item.acquisition === "buy",
+          ),
+          ...result.data.items,
+        ]
+      : [...packingItemsRef.current, ...result.data.items];
+    packingItemsRef.current = nextItems;
+    setPackingItems(nextItems);
+    setPackingCategories(result.data.categories);
+    toast.success(
+      `Imported ${result.data.items.length} packing ${
+        result.data.items.length === 1 ? "item" : "items"
+      }.`,
+    );
     return true;
   }
 
@@ -755,11 +850,11 @@ export function PlannerView({
     setTab("planner");
   }
 
-  function selectDay(dayId: string) {
+  const selectDay = useCallback((dayId: string) => {
     setActiveDayId(dayId);
     setShowAllDays(false);
     setSelectedStopId(null);
-  }
+  }, []);
 
   function openNotesForStop(stopId: string) {
     setNotesFocus((current) => ({
@@ -769,48 +864,51 @@ export function PlannerView({
     setRightPanelMode("notes");
   }
 
-  function removeDay(dayId: string) {
-    if (isImportingTrip) return;
-    if (!confirm("Delete this day and all its stops?")) return;
+  const removeDay = useCallback(
+    (dayId: string) => {
+      if (isImportingTrip) return;
+      if (!confirm("Delete this day and all its stops?")) return;
 
-    const removedIndex = days.findIndex((day) => day.id === dayId);
-    const removedDay = days[removedIndex];
-    if (!removedDay || dayId.startsWith("optimistic-day-")) return;
+      const removedIndex = days.findIndex((day) => day.id === dayId);
+      const removedDay = days[removedIndex];
+      if (!removedDay || dayId.startsWith("optimistic-day-")) return;
 
-    const previousActiveDayId = activeDayId;
-    const nextDays = days
-      .filter((day) => day.id !== dayId)
-      .map((day, index) => ({ ...day, dayNumber: index + 1 }));
-    const nextActiveDayId =
-      activeDayId === dayId
-        ? (nextDays[Math.max(0, removedIndex - 1)]?.id ??
-          nextDays[0]?.id ??
-          null)
-        : activeDayId;
+      const previousActiveDayId = activeDayId;
+      const nextDays = days
+        .filter((day) => day.id !== dayId)
+        .map((day, index) => ({ ...day, dayNumber: index + 1 }));
+      const nextActiveDayId =
+        activeDayId === dayId
+          ? (nextDays[Math.max(0, removedIndex - 1)]?.id ??
+            nextDays[0]?.id ??
+            null)
+          : activeDayId;
 
-    // Remove the day from the screen before any database work starts.
-    flushSync(() => {
-      setDays(nextDays);
-      setActiveDayId(nextActiveDayId);
-    });
+      // Remove the day from the screen before any database work starts.
+      flushSync(() => {
+        setDays(nextDays);
+        setActiveDayId(nextActiveDayId);
+      });
 
-    enqueueDayWrite(() => deleteTripDayAction(trip.id, dayId)).then(
-      (result) => {
-        if (!result.success) {
-          setDays((current) => {
-            if (current.some((day) => day.id === dayId)) return current;
-            return [...current, removedDay]
-              .sort((a, b) => a.dayNumber - b.dayNumber)
-              .map((day, index) => ({ ...day, dayNumber: index + 1 }));
-          });
-          setActiveDayId((current) =>
-            current === nextActiveDayId ? previousActiveDayId : current,
-          );
-          toast.error(result.error);
-        }
-      },
-    );
-  }
+      enqueueDayWrite(() => deleteTripDayAction(trip.id, dayId)).then(
+        (result) => {
+          if (!result.success) {
+            setDays((current) => {
+              if (current.some((day) => day.id === dayId)) return current;
+              return [...current, removedDay]
+                .sort((a, b) => a.dayNumber - b.dayNumber)
+                .map((day, index) => ({ ...day, dayNumber: index + 1 }));
+            });
+            setActiveDayId((current) =>
+              current === nextActiveDayId ? previousActiveDayId : current,
+            );
+            toast.error(result.error);
+          }
+        },
+      );
+    },
+    [isImportingTrip, days, activeDayId, trip.id],
+  );
 
   async function setDayStartTime(dayId: string, startTime: string) {
     const previousDays = days;
@@ -1206,166 +1304,6 @@ export function PlannerView({
     });
   }
 
-  function addActivity(stopId: string, place: GeocodeResult) {
-    const previousDays = days;
-    const optimisticId = `optimistic-activity-${randomId()}`;
-    const optimisticActivity: TripActivityPlain = {
-      id: optimisticId,
-      title: place.name,
-      address: place.address,
-      lat: place.lat,
-      lng: place.lng,
-      googleMapsUrl: null,
-      placeId: null,
-      description: null,
-      startTime: null,
-      endTime: null,
-      category: "sightseeing",
-    };
-
-    const appendActivity = (stop: StopPoint) =>
-      stop.id === stopId
-        ? { ...stop, activities: [...stop.activities, optimisticActivity] }
-        : stop;
-
-    setDays((current) =>
-      current.map((day) => ({
-        ...day,
-        stops: day.stops.map(appendActivity),
-      })),
-    );
-    createTripActivityAction(trip.id, stopId, {
-      title: place.name,
-      address: place.address,
-      latitude: place.lat,
-      longitude: place.lng,
-      category: "sightseeing",
-    }).then((result) => {
-      if (!result.success) {
-        setDays(previousDays);
-        toast.error(result.error);
-        return;
-      }
-
-      if (discardedOptimisticActivityIds.current.has(optimisticId)) {
-        discardedOptimisticActivityIds.current.delete(optimisticId);
-        deleteTripActivityAction(trip.id, result.data.id);
-        return;
-      }
-
-      const resolveActivity = (stop: StopPoint) => ({
-        ...stop,
-        activities: stop.activities.map((activity) =>
-          activity.id === optimisticId
-            ? { ...activity, id: result.data.id, title: result.data.title }
-            : activity,
-        ),
-      });
-
-      setDays((current) =>
-        current.map((day) => ({
-          ...day,
-          stops: day.stops.map(resolveActivity),
-        })),
-      );
-    });
-  }
-
-  async function updateActivity(
-    activityId: string,
-    patch: Partial<TripActivityPlain>,
-  ) {
-    if (activityId.startsWith("optimistic-activity-")) {
-      const patchActivity = (stop: StopPoint) => ({
-        ...stop,
-        activities: stop.activities.map((activity) =>
-          activity.id === activityId ? { ...activity, ...patch } : activity,
-        ),
-      });
-
-      setDays((current) =>
-        current.map((day) => ({
-          ...day,
-          stops: day.stops.map(patchActivity),
-        })),
-      );
-      return;
-    }
-
-    const result = await updateTripActivityAction(trip.id, activityId, patch);
-    if (!result.success) toast.error(result.error);
-  }
-
-  function removeActivity(activityId: string) {
-    const previousDays = days;
-
-    const dropActivity = (stop: StopPoint) => ({
-      ...stop,
-      activities: stop.activities.filter(
-        (activity) => activity.id !== activityId,
-      ),
-    });
-
-    setDays((current) =>
-      current.map((day) => ({
-        ...day,
-        stops: day.stops.map(dropActivity),
-      })),
-    );
-    if (activityId.startsWith("optimistic-activity-")) {
-      discardedOptimisticActivityIds.current.add(activityId);
-      return;
-    }
-
-    deleteTripActivityAction(trip.id, activityId).then((result) => {
-      if (!result.success) {
-        setDays(previousDays);
-        toast.error(result.error);
-        return;
-      }
-    });
-  }
-
-  function reorderActivities(stopId: string, orderedActivityIds: string[]) {
-    const previousDays = days;
-
-    const applyOrder = (stop: StopPoint) => {
-      if (stop.id !== stopId) return stop;
-      const byId = new Map(stop.activities.map((a) => [a.id, a]));
-      return {
-        ...stop,
-        activities: orderedActivityIds
-          .map((id) => byId.get(id))
-          .filter(
-            (activity): activity is TripActivityPlain => activity !== undefined,
-          ),
-      };
-    };
-
-    setDays((current) =>
-      current.map((day) => ({
-        ...day,
-        stops: day.stops.map(applyOrder),
-      })),
-    );
-    if (
-      orderedActivityIds.some((id) => id.startsWith("optimistic-activity-"))
-    ) {
-      return;
-    }
-
-    reorderTripActivitiesAction(trip.id, {
-      stopId,
-      activityIds: orderedActivityIds,
-    }).then((result) => {
-      if (!result.success) {
-        setDays(previousDays);
-        toast.error(result.error);
-        return;
-      }
-    });
-  }
-
   function reorderStops(dayId: string, orderedStopIds: string[]) {
     // Optimistic: reorder locally first so the UI settles immediately,
     // then persist in the background. Roll back only if the save fails.
@@ -1414,14 +1352,29 @@ export function PlannerView({
     });
   }
 
-  function moveDay(index: number, direction: -1 | 1) {
-    const destination = index + direction;
-    if (destination < 0 || destination >= days.length) return;
-    const reordered = [...days];
-    const [movedDay] = reordered.splice(index, 1);
-    reordered.splice(destination, 0, movedDay);
-    reorderDays(reordered.map((day) => day.id));
-  }
+  const moveDay = useCallback(
+    (index: number, direction: -1 | 1) => {
+      const destination = index + direction;
+      if (destination < 0 || destination >= days.length) return;
+      const reordered = [...days];
+      const [movedDay] = reordered.splice(index, 1);
+      reordered.splice(destination, 0, movedDay);
+      reorderDays(reordered.map((day) => day.id));
+    },
+    // reorderDays is redefined every render from the same `days` this
+    // callback already depends on, so it's always in sync with it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [days],
+  );
+
+  const moveDayUp = useCallback(
+    (index: number) => moveDay(index, -1),
+    [moveDay],
+  );
+  const moveDayDown = useCallback(
+    (index: number) => moveDay(index, 1),
+    [moveDay],
+  );
 
   async function handleSaveTrip(patch: TripUpdateInput) {
     const result = await updateTripAction(trip.id, patch);
@@ -1579,13 +1532,14 @@ export function PlannerView({
                   days.map((day, i) => {
                     const metric = dayMetrics[day.id];
                     const stops = day.stops;
-                    const dateLabel = formatDayDateLabel(
-                      getDayDate(i, trip.startDate),
-                    );
+                    const dayDate = getDayDate(i, trip.startDate);
+                    const dateLabel = formatDayDateLabel(dayDate);
                     return (
                       <DayListCard
                         key={day.id}
+                        dayId={day.id}
                         dateLabel={dateLabel}
+                        weekdayLabel={formatWeekdayLabel(dayDate)}
                         index={i}
                         isLast={i === days.length - 1}
                         distanceKm={metric?.distanceKm ?? 0}
@@ -1593,10 +1547,10 @@ export function PlannerView({
                         firstStopName={stops[0]?.name}
                         lastStopName={stops[stops.length - 1]?.name}
                         active={!showAllDays && day.id === currentDayId}
-                        onSelect={() => selectDay(day.id)}
-                        onRemove={() => removeDay(day.id)}
-                        onMoveUp={() => moveDay(i, -1)}
-                        onMoveDown={() => moveDay(i, 1)}
+                        onSelect={selectDay}
+                        onRemove={removeDay}
+                        onMoveUp={moveDayUp}
+                        onMoveDown={moveDayDown}
                       />
                     );
                   })
@@ -1682,10 +1636,6 @@ export function PlannerView({
                     onUpdateStop={updateStop}
                     onRemoveStop={removeStop}
                     onReorderStops={(ids) => reorderStops(currentDay.id, ids)}
-                    onAddActivity={addActivity}
-                    onUpdateActivity={updateActivity}
-                    onRemoveActivity={removeActivity}
-                    onReorderActivities={reorderActivities}
                     onSetDayStartTime={(startTime) =>
                       setDayStartTime(currentDay.id, startTime)
                     }
@@ -1801,6 +1751,20 @@ export function PlannerView({
               tripName={trip.name}
               dayCount={days.length}
               onLogoClick={() => setTab("landing")}
+              tripContext={buildPackingTripContext(
+                {
+                  ...trip,
+                  days,
+                  stays,
+                  packingItems,
+                  packingCategories,
+                },
+                {
+                  totalKm: tripTotalKm,
+                  totalMin: tripTotalMin,
+                },
+              )}
+              onAiPackingImport={importAiPackingList}
             />
           </div>
         )}

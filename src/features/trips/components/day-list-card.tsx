@@ -1,12 +1,15 @@
 "use client";
 
 import { ChevronDown, ChevronUp, Clock3, Route, Trash2 } from "lucide-react";
+import { memo } from "react";
 
 import { formatDistance, formatDuration } from "@/lib/geo";
 import { cn } from "@/lib/utils";
 
-export function DayListCard({
+export const DayListCard = memo(function DayListCard({
+  dayId,
   dateLabel,
+  weekdayLabel,
   index,
   isLast,
   distanceKm,
@@ -19,7 +22,9 @@ export function DayListCard({
   onMoveUp,
   onMoveDown,
 }: {
+  dayId: string;
   dateLabel: string | null;
+  weekdayLabel: string | null;
   index: number;
   isLast: boolean;
   distanceKm: number;
@@ -27,10 +32,10 @@ export function DayListCard({
   firstStopName?: string;
   lastStopName?: string;
   active: boolean;
-  onSelect: () => void;
-  onRemove: () => void;
-  onMoveUp: () => void;
-  onMoveDown: () => void;
+  onSelect: (dayId: string) => void;
+  onRemove: (dayId: string) => void;
+  onMoveUp: (index: number) => void;
+  onMoveDown: (index: number) => void;
 }) {
   const routeLabel =
     !firstStopName && !lastStopName
@@ -47,9 +52,9 @@ export function DayListCard({
       <article
         role="button"
         tabIndex={0}
-        onClick={onSelect}
+        onClick={() => onSelect(dayId)}
         onKeyDown={(event) => {
-          if (event.key === "Enter" || event.key === " ") onSelect();
+          if (event.key === "Enter" || event.key === " ") onSelect(dayId);
         }}
         className={cn(
           "relative flex h-[76px] w-[62px] shrink-0 snap-start cursor-pointer flex-col items-center justify-center rounded-[13px] border px-1 py-1.5 text-center shadow-[0_4px_12px_rgba(22,19,13,0.05)] transition-all sm:w-[68px] lg:hidden",
@@ -62,7 +67,7 @@ export function DayListCard({
           type="button"
           onClick={(event) => {
             event.stopPropagation();
-            onRemove();
+            onRemove(dayId);
           }}
           className={cn(
             "absolute right-1 top-1 grid size-4 place-items-center rounded-full transition-opacity hover:opacity-100 focus:opacity-100",
@@ -92,16 +97,16 @@ export function DayListCard({
             active ? "text-brand" : "text-[#6F685B]",
           )}
         >
-          Day {index + 1}
+          {weekdayLabel ? `${weekdayLabel} · ` : ""}Day {index + 1}
         </span>
       </article>
 
       <article
         role="button"
         tabIndex={0}
-        onClick={onSelect}
+        onClick={() => onSelect(dayId)}
         onKeyDown={(event) => {
-          if (event.key === "Enter" || event.key === " ") onSelect();
+          if (event.key === "Enter" || event.key === " ") onSelect(dayId);
         }}
         className={cn(
           "group relative hidden cursor-pointer grid-cols-[16px_45px_minmax(0,1fr)] items-center gap-2.5 rounded-[20px] border px-3 py-3.5 shadow-[0_5px_16px_rgba(22,19,13,0.04)] transition-all duration-200 lg:grid",
@@ -116,7 +121,7 @@ export function DayListCard({
             disabled={index === 0}
             active={active}
             dayNumber={index + 1}
-            onClick={onMoveUp}
+            onClick={() => onMoveUp(index)}
           />
           <span
             className={cn(
@@ -132,7 +137,7 @@ export function DayListCard({
             disabled={isLast}
             active={active}
             dayNumber={index + 1}
-            onClick={onMoveDown}
+            onClick={() => onMoveDown(index)}
           />
         </div>
 
@@ -158,6 +163,16 @@ export function DayListCard({
           >
             {calendarDay ?? index + 1}
           </span>
+          {weekdayLabel && (
+            <span
+              className={cn(
+                "mt-1 text-[8px] font-black uppercase tracking-[0.14em]",
+                active ? "text-[#A89F88]" : "text-[#8A8270]",
+              )}
+            >
+              {weekdayLabel}
+            </span>
+          )}
         </div>
 
         <div className="min-w-0">
@@ -169,7 +184,7 @@ export function DayListCard({
               type="button"
               onClick={(event) => {
                 event.stopPropagation();
-                onRemove();
+                onRemove(dayId);
               }}
               className={cn(
                 "ml-auto grid size-6 shrink-0 place-items-center rounded-[7px] opacity-100 transition-all hover:text-destructive focus:opacity-100 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100",
@@ -218,7 +233,7 @@ export function DayListCard({
       </article>
     </>
   );
-}
+});
 
 function MoveButton({
   direction,

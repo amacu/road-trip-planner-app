@@ -1,11 +1,14 @@
 "use server";
 
+import { z } from "zod";
+
 import type { ActionResult } from "@/lib/action-result";
 import type { TripPackingItemPlain } from "@/features/trips/lib/trip-view-model";
 import { requireUser } from "@/lib/auth/guards";
 import {
   createTripPackingItem,
   deleteTripPackingItem,
+  importTripPackingItems,
   updateTripPackingCategories,
   updateTripPackingItem,
 } from "@/lib/db/trip-packing-items";
@@ -60,7 +63,6 @@ export async function createTripPackingItemAction(
 }
 
 export async function updateTripPackingItemAction(
-  tripId: string,
   itemId: string,
   input: unknown,
 ): Promise<ActionResult<TripPackingItemPlain>> {
@@ -78,7 +80,6 @@ export async function updateTripPackingItemAction(
 }
 
 export async function deleteTripPackingItemAction(
-  tripId: string,
   itemId: string,
 ): Promise<ActionResult> {
   const user = await requireUser();
@@ -106,4 +107,39 @@ export async function updateTripPackingCategoriesAction(
   );
   if (!categories) return { success: false, error: "Trip not found." };
   return { success: true, data: categories };
+}
+
+const aiPackingImportSchema = z.object({
+  items: z.array(tripPackingItemSchema).min(1).max(200),
+  categories: packingCategoriesSchema,
+  replaceExisting: z.boolean(),
+});
+
+export async function importAiPackingListAction(
+  tripId: string,
+  input: unknown,
+): Promise<
+  ActionResult<{
+    items: TripPackingItemPlain[];
+    categories: PackingCategory[];
+  }>
+> {
+  const user = await requireUser();
+  const parsed = aiPackingImportSchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      success: false,
+      error: parsed.error.issues[0]?.message ?? "Invalid AI packing list.",
+    };
+  }
+
+  const imported = await importTripPackingItems(tripId, user.id, parsed.data);
+  if (!imported) return { success: false, error: "Trip not found." };
+  return {
+    success: true,
+    data: {
+      categories: imported.categories,
+      items: imported.items.map(toPlain),
+    },
+  };
 }

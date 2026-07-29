@@ -10,9 +10,26 @@ type ValhallaResponse = {
   };
 };
 
+type RoutingResult = {
+  code: "Ok";
+  routes: Array<{
+    distance: number;
+    duration: number;
+    geometry: { coordinates: Array<[number, number]> };
+    legs: Array<{ distance: number; duration: number }>;
+  }>;
+};
+
 const MAX_CONCURRENT_REQUESTS = 3;
+const ROUTE_CACHE_TTL_MS = 5 * 60 * 1000;
+const MAX_ROUTE_CACHE_ENTRIES = 200;
 let activeRequests = 0;
 const waitingRequests: Array<() => void> = [];
+const routeCache = new Map<
+  string,
+  { expiresAt: number; result: RoutingResult }
+>();
+const inFlightRoutes = new Map<string, Promise<RoutingResult>>();
 
 async function withRoutingSlot<T>(task: () => Promise<T>): Promise<T> {
   if (activeRequests >= MAX_CONCURRENT_REQUESTS) {
@@ -56,6 +73,88 @@ function decodePolyline6(shape: string): Array<[number, number]> {
   return points;
 }
 
+async function requestRoute(
+  cacheKey: string,
+  profile: "driving" | "walking",
+  locations: Array<{ lat: number; lng: number }>,
+): Promise<RoutingResult> {
+  const cached = routeCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) return cached.result;
+  if (cached) routeCache.delete(cacheKey);
+
+  const existingRequest = inFlightRoutes.get(cacheKey);
+  if (existingRequest) return existingRequest;
+
+  const request = withRoutingSlot(async () => {
+    const response = await fetch("https://valhalla1.openstreetmap.de/route", {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        "X-Client-Id": "roadtrip-planner",
+      },
+      body: JSON.stringify({
+        locations: locations.map(({ lat, lng }) => ({ lat, lon: lng })),
+        costing: profile === "walking" ? "pedestrian" : "auto",
+        directions_options: { units: "kilometers" },
+      }),
+      signal: AbortSignal.timeout(20_000),
+      cache: "no-store",
+    });
+
+    if (!response.ok) {
+      throw new Error(`Valhalla returned ${response.status}.`);
+    }
+    const data = (await response.json()) as ValhallaResponse;
+    const legs = data.trip?.legs ?? [];
+    const geometry = legs.flatMap((leg, index) => {
+      const points = leg.shape ? decodePolyline6(leg.shape) : [];
+      return index === 0 ? points : points.slice(1);
+    });
+    const distanceKm = data.trip?.summary?.length;
+    const durationSeconds = data.trip?.summary?.time;
+
+    if (
+      geometry.length < 2 ||
+      typeof distanceKm !== "number" ||
+      typeof durationSeconds !== "number"
+    ) {
+      throw new Error("Valhalla returned an incomplete route.");
+    }
+
+    const result: RoutingResult = {
+      code: "Ok",
+      routes: [
+        {
+          distance: distanceKm * 1000,
+          duration: durationSeconds,
+          geometry: { coordinates: geometry },
+          legs: legs.map((leg) => ({
+            distance: (leg.summary?.length ?? 0) * 1000,
+            duration: leg.summary?.time ?? 0,
+          })),
+        },
+      ],
+    };
+
+    if (routeCache.size >= MAX_ROUTE_CACHE_ENTRIES) {
+      routeCache.delete(routeCache.keys().next().value!);
+    }
+    routeCache.set(cacheKey, {
+      expiresAt: Date.now() + ROUTE_CACHE_TTL_MS,
+      result,
+    });
+    return result;
+  });
+
+  inFlightRoutes.set(cacheKey, request);
+  try {
+    return await request;
+  } finally {
+    inFlightRoutes.delete(cacheKey);
+  }
+}
+
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const profile = url.searchParams.get("profile");
@@ -96,58 +195,13 @@ export async function GET(request: Request) {
   }
 
   try {
-    const data = await withRoutingSlot(async () => {
-      const response = await fetch("https://valhalla1.openstreetmap.de/route", {
-        method: "POST",
-        headers: {
-          Accept: "application/json",
-          "Content-Type": "application/json",
-          "X-Client-Id": "roadtrip-planner",
-        },
-        body: JSON.stringify({
-          locations: locations.map(({ lat, lng }) => ({ lat, lon: lng })),
-          costing: profile === "walking" ? "pedestrian" : "auto",
-          directions_options: { units: "kilometers" },
-        }),
-        signal: AbortSignal.timeout(20_000),
-        cache: "no-store",
-      });
-
-      if (!response.ok) {
-        throw new Error(`Valhalla returned ${response.status}.`);
-      }
-      return (await response.json()) as ValhallaResponse;
-    });
-
-    const legs = data.trip?.legs ?? [];
-    const geometry = legs.flatMap((leg, index) => {
-      const points = leg.shape ? decodePolyline6(leg.shape) : [];
-      return index === 0 ? points : points.slice(1);
-    });
-    const distanceKm = data.trip?.summary?.length;
-    const durationSeconds = data.trip?.summary?.time;
-
-    if (
-      geometry.length < 2 ||
-      typeof distanceKm !== "number" ||
-      typeof durationSeconds !== "number"
-    ) {
-      throw new Error("Valhalla returned an incomplete route.");
-    }
-
-    return NextResponse.json({
-      code: "Ok",
-      routes: [
-        {
-          distance: distanceKm * 1000,
-          duration: durationSeconds,
-          geometry: { coordinates: geometry },
-          legs: legs.map((leg) => ({
-            distance: (leg.summary?.length ?? 0) * 1000,
-            duration: leg.summary?.time ?? 0,
-          })),
-        },
-      ],
+    const result = await requestRoute(
+      `${profile}:${coordinates}`,
+      profile,
+      locations,
+    );
+    return NextResponse.json(result, {
+      headers: { "Cache-Control": "private, max-age=300" },
     });
   } catch (error) {
     console.error("Routing request failed:", error);

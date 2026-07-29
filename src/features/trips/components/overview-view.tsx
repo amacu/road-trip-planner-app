@@ -1,6 +1,7 @@
 "use client";
 
 import { Eye, PenLine, Pencil, Trash2, UserPlus, Users } from "lucide-react";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useState } from "react";
 import { toast } from "sonner";
@@ -21,7 +22,6 @@ import {
 import { LogoMark } from "@/components/shared/app-logo";
 import { FuelOverviewCard } from "@/features/fuel/components/fuel-overview-card";
 import type { FuelPlan } from "@/features/fuel/lib/fuel-plan";
-import { MapView } from "@/features/trip-stops/components/map-view";
 import {
   addTripMemberAction,
   removeTripMemberAction,
@@ -39,6 +39,14 @@ import {
   type TripUpdateInput,
 } from "@/lib/validators/trip";
 import { cn } from "@/lib/utils";
+
+const MapView = dynamic(
+  () =>
+    import("@/features/trip-stops/components/map-view").then(
+      (module) => module.MapView,
+    ),
+  { ssr: false },
+);
 
 export function OverviewView({
   trip,

@@ -27,6 +27,8 @@ export function FuelDashboard({
   tripName,
   dayCount,
   onLogoClick,
+  tripContext,
+  onAiPackingImport,
 }: {
   stays: TripStayPlain[];
   packingItems: TripPackingItemPlain[];
@@ -45,6 +47,13 @@ export function FuelDashboard({
   tripName: string;
   dayCount: number;
   onLogoClick: () => void;
+  tripContext: string;
+  onAiPackingImport: (
+    items: TripPackingItemInput[],
+    categories: Array<{ name: string; color: string }>,
+    replaceExisting: boolean,
+    allowNewCategories: boolean,
+  ) => Promise<boolean>;
 }) {
   return (
     <div className="min-h-full w-full max-w-full overflow-x-clip bg-[#fffaf0] text-[#16130D]">
@@ -92,6 +101,8 @@ export function FuelDashboard({
             onUpdate={onUpdatePackingItem}
             onDelete={onDeletePackingItem}
             onUpdateCategories={onUpdatePackingCategories}
+            tripContext={tripContext}
+            onAiImport={onAiPackingImport}
           />
         </div>
       </div>

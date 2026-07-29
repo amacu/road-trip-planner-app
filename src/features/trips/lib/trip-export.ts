@@ -22,7 +22,12 @@ function getDayDate(dayIndex: number, tripStartDate: string | null) {
  */
 export function buildTripExportPrompt(
   trip: TripPlain,
-  totals: { totalKm: number; totalMin: number; fuelPln: number },
+  totals: {
+    totalKm: number;
+    totalMin: number;
+    fuelPln: number;
+    includeClosingInstruction?: boolean;
+  },
 ): string {
   const lines: string[] = [];
 
@@ -133,11 +138,108 @@ export function buildTripExportPrompt(
     }
   });
 
-  lines.push(
-    "",
-    "---",
-    "Help me refine this road trip plan — suggest improvements, fill gaps, or answer questions I have about it.",
+  if (totals.includeClosingInstruction !== false) {
+    lines.push(
+      "",
+      "---",
+      "Help me refine this road trip plan — suggest improvements, fill gaps, or answer questions I have about it.",
+    );
+  }
+
+  return lines.join("\n");
+}
+
+/**
+ * Builds the deliberately small trip context used by the packing assistant.
+ * Unlike the general-purpose export, this must not expose free-form trip,
+ * day, stop, stay, or activity notes. Packing only needs the itinerary shape.
+ */
+export function buildPackingTripContext(
+  trip: TripPlain,
+  totals: {
+    totalKm: number;
+    totalMin: number;
+  },
+): string {
+  const lines: string[] = [`Trip: ${trip.name}`];
+  const summary: string[] = [];
+
+  if (trip.startDate) summary.push(`starts ${trip.startDate}`);
+  summary.push(
+    `${trip.days.length} ${trip.days.length === 1 ? "day" : "days"}`,
   );
+  if (totals.totalKm > 0) summary.push(formatDistance(totals.totalKm));
+  if (totals.totalMin > 0) {
+    summary.push(`${formatDuration(totals.totalMin)} driving`);
+  }
+  if (trip.vehicle) {
+    summary.push(
+      `vehicle: ${trip.vehicle.name}${trip.vehicle.type ? ` (${trip.vehicle.type})` : ""}`,
+    );
+  }
+  lines.push(summary.join(" · "));
+
+  trip.days.forEach((day, dayIndex) => {
+    const dayHeader = [`Day ${dayIndex + 1}`];
+    const dayDate = getDayDate(dayIndex, trip.startDate);
+    if (dayDate) dayHeader.push(dayDate);
+    if (day.name) dayHeader.push(day.name);
+    if (day.startTime) dayHeader.push(`starts ${day.startTime}`);
+    lines.push("", dayHeader.join(" · "));
+
+    if (day.stops.length === 0) {
+      lines.push("- No places planned");
+    }
+
+    day.stops.forEach((stop, stopIndex) => {
+      const details: string[] = [];
+      if (stopIndex > 0) {
+        details.push(stop.travelMode === "walking" ? "walk" : "drive");
+      }
+      details.push(stop.name);
+      if (stop.address) details.push(stop.address);
+      if (stop.startTime) {
+        details.push(
+          stop.endTime
+            ? `${stop.startTime}–${stop.endTime}`
+            : `at ${stop.startTime}`,
+        );
+      }
+      if (stop.visitDurationMin) {
+        details.push(`visit ${formatDuration(stop.visitDurationMin)}`);
+      }
+      lines.push(`- ${details.join(" · ")}`);
+
+      stop.activities.forEach((activity) => {
+        const activityDetails = [activity.title];
+        if (activity.startTime) {
+          activityDetails.push(
+            activity.endTime
+              ? `${activity.startTime}–${activity.endTime}`
+              : `at ${activity.startTime}`,
+          );
+        }
+        if (activity.category) activityDetails.push(activity.category);
+        lines.push(`  - ${activityDetails.join(" · ")}`);
+      });
+    });
+
+    const stay =
+      dayIndex < trip.days.length - 1
+        ? trip.stays.find((item) => item.afterDayId === day.id)
+        : undefined;
+    if (stay?.stayType === "driving_overnight") {
+      lines.push("- Night: driving overnight");
+    } else if (stay) {
+      const stayDetails = [`Night: ${stay.name}`];
+      if (stay.address) stayDetails.push(stay.address);
+      if (stay.checkInTime) stayDetails.push(`check-in ${stay.checkInTime}`);
+      if (stay.checkOutTime) stayDetails.push(`check-out ${stay.checkOutTime}`);
+      lines.push(`- ${stayDetails.join(" · ")}`);
+    } else if (dayIndex < trip.days.length - 1) {
+      lines.push("- Night: not planned");
+    }
+  });
 
   return lines.join("\n");
 }

@@ -1,11 +1,5 @@
 export type FuelTypeKey = "petrol95" | "diesel" | "lpg";
 
-export const FUEL_PRICE_DATABASE_META = {
-  currency: "PLN",
-  unit: "PLN/L",
-  source: "Supabase PostgreSQL fuel_prices table",
-};
-
 export type FuelCountryPrice = {
   code: string;
   country: string;

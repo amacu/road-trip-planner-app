@@ -28,7 +28,6 @@ import {
 } from "@/components/ui/dialog";
 import type {
   StopPoint,
-  TripActivityPlain,
   TripDayPlain,
 } from "@/features/trips/lib/trip-view-model";
 import { AddStopBox } from "@/features/trip-stops/components/add-stop-box";
@@ -75,10 +74,6 @@ export function DayPanel({
   onUpdateStop,
   onRemoveStop,
   onReorderStops,
-  onAddActivity,
-  onUpdateActivity,
-  onRemoveActivity,
-  onReorderActivities,
   onSetDayStartTime,
   onLaunchNav,
   onOpenStopNotes,
@@ -106,13 +101,6 @@ export function DayPanel({
   onUpdateStop: (stopId: string, patch: Partial<StopPoint>) => void;
   onRemoveStop: (stopId: string) => void;
   onReorderStops: (orderedStopIds: string[]) => void;
-  onAddActivity: (stopId: string, place: GeocodeResult) => void;
-  onUpdateActivity: (
-    activityId: string,
-    patch: Partial<TripActivityPlain>,
-  ) => void;
-  onRemoveActivity: (activityId: string) => void;
-  onReorderActivities: (stopId: string, orderedActivityIds: string[]) => void;
   onSetDayStartTime: (startTime: string) => void;
   onLaunchNav: () => void;
   onOpenStopNotes?: (stopId: string) => void;
@@ -358,12 +346,6 @@ export function DayPanel({
                     onSetDayStartTime={onSetDayStartTime}
                     onUpdate={(patch) => onUpdateStop(stop.id, patch)}
                     onRemove={() => onRemoveStop(stop.id)}
-                    onAddActivity={(place) => onAddActivity(stop.id, place)}
-                    onUpdateActivity={onUpdateActivity}
-                    onRemoveActivity={onRemoveActivity}
-                    onReorderActivities={(activityIds) =>
-                      onReorderActivities(stop.id, activityIds)
-                    }
                     onMoveUp={() => moveStop(i, -1)}
                     onMoveDown={() => moveStop(i, 1)}
                     onOpenNotes={() => onOpenStopNotes?.(stop.id)}

@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client";
 
-import { tripAccessWhere, tripWriteAccessWhere } from "@/lib/db/trip-access";
+import { tripWriteAccessWhere } from "@/lib/db/trip-access";
 import { reorderWithOffset } from "@/lib/db/utils";
 import { prisma } from "@/lib/prisma";
 import type { AiDayStopsImportInput } from "@/lib/validators/trip-stop";
@@ -25,13 +25,6 @@ export type TripStopCreateData = {
 };
 
 export type TripStopUpdateData = Partial<TripStopCreateData>;
-
-export async function getTripStops(dayId: string, userId: string) {
-  return prisma.tripStop.findMany({
-    where: { tripDayId: dayId, trip: tripAccessWhere(userId) },
-    orderBy: { stopOrder: "asc" },
-  });
-}
 
 export async function createTripStop(
   dayId: string,
@@ -123,30 +116,28 @@ export async function importTripDayStops(
             _max: { stopOrder: true },
           })
         )._max.stopOrder ?? 0) + 1;
-    const ids: string[] = [];
 
-    for (const [index, item] of input.items.entries()) {
-      const stop = await tx.tripStop.create({
-        data: {
-          tripId: day.tripId,
-          tripDayId: dayId,
-          stopOrder: firstOrder + index,
-          name: item.name,
-          address: item.address || null,
-          latitude: new Prisma.Decimal(item.latitude),
-          longitude: new Prisma.Decimal(item.longitude),
-          countryCode: item.countryCode,
-          stopType: item.itemType,
-          travelMode: item.travelMode,
-          description: item.description || null,
-          visitDurationMin: item.visitDurationMin,
-        },
-        select: { id: true },
-      });
-      ids.push(stop.id);
-    }
+    const created = await tx.tripStop.createManyAndReturn({
+      data: input.items.map((item, index) => ({
+        tripId: day.tripId,
+        tripDayId: dayId,
+        stopOrder: firstOrder + index,
+        name: item.name,
+        address: item.address || null,
+        latitude: new Prisma.Decimal(item.latitude),
+        longitude: new Prisma.Decimal(item.longitude),
+        countryCode: item.countryCode,
+        stopType: item.itemType,
+        travelMode: item.travelMode,
+        description: item.description || null,
+        visitDurationMin: item.visitDurationMin,
+      })),
+      select: { id: true, stopOrder: true },
+    });
 
-    return ids;
+    return created
+      .sort((a, b) => a.stopOrder - b.stopOrder)
+      .map((stop) => stop.id);
   });
 }
 

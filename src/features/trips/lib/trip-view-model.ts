@@ -341,15 +341,3 @@ export function toTripStopSummaryPlain(stop: {
 }): TripStopSummaryPlain {
   return { id: stop.id, name: stop.name };
 }
-
-export type TripActivitySummaryPlain = {
-  id: string;
-  title: string;
-};
-
-export function toTripActivitySummaryPlain(activity: {
-  id: string;
-  title: string;
-}): TripActivitySummaryPlain {
-  return { id: activity.id, title: activity.title };
-}

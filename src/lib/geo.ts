@@ -42,31 +42,6 @@ export function haversineKm(
   return 2 * R * Math.asin(Math.sqrt(h));
 }
 
-type StopLike = {
-  latitude: { toNumber: () => number } | null;
-  longitude: { toNumber: () => number } | null;
-};
-
-/** Total straight-line distance across an ordered list of stops with Decimal coordinates. */
-export function dayDistanceKm(stops: StopLike[]): number {
-  const points = stops
-    .filter((s) => s.latitude !== null && s.longitude !== null)
-    .map((s) => ({
-      lat: s.latitude!.toNumber(),
-      lng: s.longitude!.toNumber(),
-    }));
-
-  let total = 0;
-  for (let i = 1; i < points.length; i++) {
-    total += haversineKm(points[i - 1], points[i]);
-  }
-  return total;
-}
-
-export function estimateDriveMinutes(km: number) {
-  return Math.round((km / 70) * 60);
-}
-
 export function formatDuration(min: number) {
   if (min < 60) return `${min}m`;
   const h = Math.floor(min / 60);

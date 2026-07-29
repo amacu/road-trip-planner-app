@@ -23,5 +23,4 @@ export const vehicleCreateSchema = z.object({
 
 export const vehicleUpdateSchema = vehicleCreateSchema.partial();
 
-export type VehicleCreateInput = z.infer<typeof vehicleCreateSchema>;
 export type VehicleUpdateInput = z.infer<typeof vehicleUpdateSchema>;

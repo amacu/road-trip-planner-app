@@ -22,32 +22,6 @@ import type {
 } from "@/features/trips/lib/trip-view-model";
 import { tripUpdateSchema, type TripUpdateInput } from "@/lib/validators/trip";
 
-export function TripSettingsView({
-  trip,
-  vehicles,
-  isOwner,
-  onSave,
-  onDelete,
-}: {
-  trip: TripPlain;
-  vehicles: VehiclePlain[];
-  isOwner: boolean;
-  onSave: (patch: TripUpdateInput) => Promise<void>;
-  onDelete: () => void;
-}) {
-  return (
-    <div className="min-h-0 flex-1 overflow-y-auto p-5 md:p-10">
-      <TripSettingsPanel
-        trip={trip}
-        vehicles={vehicles}
-        isOwner={isOwner}
-        onSave={onSave}
-        onDelete={onDelete}
-      />
-    </div>
-  );
-}
-
 export function TripSettingsPanel({
   trip,
   vehicles,
@@ -86,12 +60,12 @@ export function TripSettingsPanel({
   async function onSubmit(data: TripUpdateInput) {
     try {
       await onSave(data);
-      // Commit the submitted values immediately. The parent refresh may arrive
-      // later, and must not restore the values from before this save.
       reset(data);
       toast.success("Trip updated.");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Unable to save trip.");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Unable to save trip.",
+      );
     }
   }
 
@@ -99,9 +73,9 @@ export function TripSettingsPanel({
     try {
       await onSave({ vehicleId: vehicleId === "none" ? null : vehicleId });
       toast.success("Vehicle updated.");
-    } catch (err) {
+    } catch (error) {
       toast.error(
-        err instanceof Error ? err.message : "Unable to update vehicle.",
+        error instanceof Error ? error.message : "Unable to update vehicle.",
       );
     }
   }
@@ -114,7 +88,6 @@ export function TripSettingsPanel({
         <h2 className="text-lg font-black tracking-tight">Trip details</h2>
         <form className="mt-4 space-y-4" onSubmit={handleSubmit(onSubmit)}>
           <TripFormFields idPrefix="trip-settings" register={register} />
-
           <div className="flex justify-end">
             <Button
               type="submit"

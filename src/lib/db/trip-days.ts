@@ -1,4 +1,4 @@
-import { tripAccessWhere, tripWriteAccessWhere } from "@/lib/db/trip-access";
+import { tripWriteAccessWhere } from "@/lib/db/trip-access";
 import { reorderWithOffset, toDateOrNull } from "@/lib/db/utils";
 import { prisma } from "@/lib/prisma";
 
@@ -11,18 +11,6 @@ export type TripDayCreateData = {
 };
 
 export type TripDayUpdateData = Partial<TripDayCreateData>;
-
-export async function getTripDays(tripId: string, userId: string) {
-  return prisma.tripDay.findMany({
-    where: { tripId, trip: tripAccessWhere(userId) },
-    orderBy: { dayNumber: "asc" },
-    include: {
-      stops: {
-        orderBy: { stopOrder: "asc" },
-      },
-    },
-  });
-}
 
 export async function createTripDay(
   tripId: string,

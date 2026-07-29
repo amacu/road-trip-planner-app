@@ -1,38 +1,18 @@
 "use client";
 
 import {
-  Camera,
   ChevronDown,
   ChevronUp,
   Clock,
-  Coffee,
   Landmark,
   MapPin,
   NotebookPen,
-  Mountain,
-  Plus,
-  ShoppingBag,
-  Trees,
   Trash2,
-  Utensils,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import type {
-  StopPoint,
-  TripActivityPlain,
-} from "@/features/trips/lib/trip-view-model";
-import { AddStopBox } from "@/features/trip-stops/components/add-stop-box";
-import type { GeocodeResult } from "@/lib/integrations/geocode";
+import type { StopPoint } from "@/features/trips/lib/trip-view-model";
 import { cn } from "@/lib/utils";
-import { ACTIVITY_CATEGORIES } from "@/lib/validators/trip-activity";
 
 function minutesToHHMM(min: number | null | undefined): string {
   if (!min) return "00:00";
@@ -63,10 +43,6 @@ export function StopCard({
   headerAction,
   onUpdate,
   onRemove,
-  onAddActivity: _onAddActivity,
-  onUpdateActivity: _onUpdateActivity,
-  onRemoveActivity: _onRemoveActivity,
-  onReorderActivities: _onReorderActivities,
   onMoveUp,
   onMoveDown,
   onOpenNotes,
@@ -90,13 +66,6 @@ export function StopCard({
   headerAction?: React.ReactNode;
   onUpdate: (patch: Partial<StopPoint>) => void;
   onRemove: () => void;
-  onAddActivity: (place: GeocodeResult) => void;
-  onUpdateActivity: (
-    activityId: string,
-    patch: Partial<TripActivityPlain>,
-  ) => void;
-  onRemoveActivity: (activityId: string) => void;
-  onReorderActivities: (orderedActivityIds: string[]) => void;
   onMoveUp: () => void;
   onMoveDown: () => void;
   onOpenNotes?: () => void;
@@ -355,279 +324,6 @@ export function StopCard({
         )}
       </div>
     </li>
-  );
-}
-
-export function ActivitiesTabDeprecated({
-  activities,
-  onAdd,
-  onUpdate,
-  onRemove,
-  onReorder,
-}: {
-  activities: TripActivityPlain[];
-  onAdd: (place: GeocodeResult) => void;
-  onUpdate: (activityId: string, patch: Partial<TripActivityPlain>) => void;
-  onRemove: (activityId: string) => void;
-  onReorder: (orderedActivityIds: string[]) => void;
-}) {
-  const [adding, setAdding] = useState(false);
-
-  function moveActivity(activityId: string, direction: -1 | 1) {
-    const index = activities.findIndex(
-      (activity) => activity.id === activityId,
-    );
-    const nextIndex = index + direction;
-    if (index < 0 || nextIndex < 0 || nextIndex >= activities.length) return;
-
-    const next = [...activities];
-    const [activity] = next.splice(index, 1);
-    next.splice(nextIndex, 0, activity);
-    onReorder(next.map((item) => item.id));
-  }
-
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between gap-3">
-        <h4 className="text-sm font-black tracking-tight">Activities</h4>
-        <button
-          onClick={() => setAdding((value) => !value)}
-          className="flex h-8 items-center gap-1.5 rounded-lg bg-brand-muted px-2.5 text-xs font-bold text-brand hover:bg-brand-muted/80"
-        >
-          <Plus className="size-3.5" />
-          Add Activity
-        </button>
-      </div>
-
-      {adding && (
-        <AddStopBox
-          placeholder="Search an activity place"
-          helpText="Pick a real place for this activity."
-          onAdd={(place) => {
-            onAdd(place);
-            setAdding(false);
-          }}
-          onClose={() => setAdding(false)}
-        />
-      )}
-
-      {activities.length === 0 && !adding ? (
-        <div className="rounded-lg border border-dashed border-border p-4 text-center text-xs text-muted-foreground">
-          No activities yet. Add a place to visit here.
-        </div>
-      ) : (
-        <ol className="space-y-2">
-          {activities.map((activity, index) => (
-            <ActivityRow
-              key={activity.id}
-              activity={activity}
-              isFirst={index === 0}
-              isLast={index === activities.length - 1}
-              onMoveUp={() => moveActivity(activity.id, -1)}
-              onMoveDown={() => moveActivity(activity.id, 1)}
-              onUpdate={(patch) => onUpdate(activity.id, patch)}
-              onRemove={() => onRemove(activity.id)}
-            />
-          ))}
-        </ol>
-      )}
-    </div>
-  );
-}
-
-function ActivityRow({
-  activity,
-  isFirst,
-  isLast,
-  onMoveUp,
-  onMoveDown,
-  onUpdate,
-  onRemove,
-}: {
-  activity: TripActivityPlain;
-  isFirst: boolean;
-  isLast: boolean;
-  onMoveUp: () => void;
-  onMoveDown: () => void;
-  onUpdate: (patch: Partial<TripActivityPlain>) => void;
-  onRemove: () => void;
-}) {
-  const [expanded, setExpanded] = useState(false);
-  const { icon, tone, label } = getActivityPresentation(activity.category);
-  const Icon = icon;
-
-  return (
-    <li className="rounded-lg border border-border bg-white p-2">
-      <div className="grid grid-cols-[24px_40px_minmax(0,1fr)_auto] items-center gap-2">
-        <div className="flex flex-col items-center">
-          <button
-            onClick={onMoveUp}
-            disabled={isFirst}
-            className="grid size-4 place-items-center rounded text-muted-foreground hover:bg-muted disabled:opacity-20"
-            title="Move up"
-          >
-            <ChevronDown className="size-3 rotate-180" />
-          </button>
-          <button
-            onClick={onMoveDown}
-            disabled={isLast}
-            className="grid size-4 place-items-center rounded text-muted-foreground hover:bg-muted disabled:opacity-20"
-            title="Move down"
-          >
-            <ChevronDown className="size-3" />
-          </button>
-        </div>
-
-        <div className={cn("grid size-10 place-items-center rounded-lg", tone)}>
-          <Icon className="size-5" />
-        </div>
-
-        <button
-          onClick={() => setExpanded((value) => !value)}
-          className="min-w-0 text-left"
-        >
-          <span className="flex min-w-0 items-center gap-2">
-            {activity.startTime && (
-              <span className="shrink-0 text-xs font-bold text-muted-foreground">
-                {activity.startTime}
-              </span>
-            )}
-            <span className="truncate text-sm font-bold">{activity.title}</span>
-          </span>
-          <span className="mt-0.5 flex min-w-0 items-start gap-1.5 text-xs text-muted-foreground">
-            <MapPin className="mt-0.5 size-3.5 shrink-0" />
-            <span className="truncate">
-              {activity.address || "No address saved"}
-            </span>
-          </span>
-        </button>
-
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() => setExpanded((value) => !value)}
-            className="grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-muted"
-            title={expanded ? "Collapse activity" : "Expand activity"}
-          >
-            <ChevronDown
-              className={cn(
-                "size-4 transition-transform",
-                expanded && "rotate-180",
-              )}
-            />
-          </button>
-          <button
-            onClick={onRemove}
-            className="grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-muted hover:text-destructive"
-            title="Delete activity"
-          >
-            <Trash2 className="size-4" />
-          </button>
-        </div>
-      </div>
-
-      {expanded && (
-        <div className="mt-3 space-y-2 border-t border-border pt-3">
-          <div className="grid grid-cols-[78px_minmax(0,1fr)] gap-2">
-            <PlainTimeInput
-              value={activity.startTime ?? ""}
-              onChange={(v) => onUpdate({ startTime: v })}
-              compact
-            />
-            <input
-              value={activity.title}
-              onChange={(e) => onUpdate({ title: e.target.value })}
-              className="h-8 min-w-0 rounded-md border border-input bg-white px-2 text-sm font-bold outline-none ring-brand/40 focus:ring-2"
-            />
-          </div>
-          <textarea
-            value={activity.description ?? ""}
-            onChange={(e) => onUpdate({ description: e.target.value })}
-            rows={2}
-            placeholder="What will you do here?"
-            className="w-full resize-none rounded-md border border-input bg-white px-2 py-1.5 text-xs outline-none ring-brand/40 focus:ring-2"
-          />
-          <Select
-            value={activity.category}
-            onValueChange={(category) => onUpdate({ category })}
-          >
-            <SelectTrigger className="h-8 rounded-md border-input bg-white px-2 text-xs font-semibold">
-              <SelectValue>
-                <span className="flex items-center gap-2">
-                  <Icon className="size-3.5 text-muted-foreground" />
-                  {label}
-                </span>
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {ACTIVITY_CATEGORIES.map((category) => {
-                const { icon: Icon, label } = getActivityPresentation(category);
-                return (
-                  <SelectItem key={category} value={category}>
-                    <span className="flex items-center gap-2">
-                      <Icon className="size-3.5 text-muted-foreground" />
-                      {label}
-                    </span>
-                  </SelectItem>
-                );
-              })}
-            </SelectContent>
-          </Select>
-        </div>
-      )}
-    </li>
-  );
-}
-
-const ACTIVITY_PRESENTATION = {
-  sightseeing: {
-    icon: Camera,
-    tone: "bg-violet-50 text-violet-600",
-    label: "Sightseeing",
-  },
-  food: {
-    icon: Utensils,
-    tone: "bg-orange-50 text-orange-600",
-    label: "Food",
-  },
-  culture: {
-    icon: Landmark,
-    tone: "bg-emerald-50 text-emerald-600",
-    label: "Culture",
-  },
-  nature: {
-    icon: Trees,
-    tone: "bg-lime-50 text-lime-700",
-    label: "Nature",
-  },
-  hiking: {
-    icon: Mountain,
-    tone: "bg-teal-50 text-teal-600",
-    label: "Hiking",
-  },
-  shopping: {
-    icon: ShoppingBag,
-    tone: "bg-pink-50 text-pink-600",
-    label: "Shopping",
-  },
-  coffee: {
-    icon: Coffee,
-    tone: "bg-sky-50 text-sky-600",
-    label: "Coffee",
-  },
-  other: {
-    icon: Camera,
-    tone: "bg-violet-50 text-violet-600",
-    label: "Other",
-  },
-} satisfies Record<
-  string,
-  { icon: typeof Camera; tone: string; label: string }
->;
-
-function getActivityPresentation(category: string) {
-  return (
-    ACTIVITY_PRESENTATION[category as keyof typeof ACTIVITY_PRESENTATION] ??
-    ACTIVITY_PRESENTATION.other
   );
 }
 

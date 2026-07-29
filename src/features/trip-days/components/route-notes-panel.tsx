@@ -1,6 +1,14 @@
 "use client";
 
-import { Check, Pencil, X } from "lucide-react";
+import {
+  Check,
+  ExternalLink,
+  Link2,
+  Loader2,
+  Pencil,
+  Trash2,
+  X,
+} from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import type {
@@ -28,15 +36,35 @@ export function RouteNotesPanel({
   onUpdateStayNotes: (stayId: string, notes: string) => Promise<boolean>;
 }) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const entryRefs = useRef(new Map<string, HTMLLIElement>());
 
   useEffect(() => {
     if (!focusEntryId) return;
-    const frame = requestAnimationFrame(() => {
-      document
-        .getElementById(`route-note-${focusEntryId}`)
-        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    let scrollFrame = 0;
+    const renderFrame = requestAnimationFrame(() => {
+      scrollFrame = requestAnimationFrame(() => {
+        const container = scrollContainerRef.current;
+        const entry = entryRefs.current.get(focusEntryId);
+        if (!container || !entry) return;
+
+        const containerRect = container.getBoundingClientRect();
+        const entryRect = entry.getBoundingClientRect();
+        const centeredTop =
+          container.scrollTop +
+          entryRect.top -
+          containerRect.top -
+          (container.clientHeight - entryRect.height) / 2;
+
+        container.scrollTo({
+          top: Math.max(0, centeredTop),
+          behavior: "smooth",
+        });
+      });
     });
-    return () => cancelAnimationFrame(frame);
+    return () => {
+      cancelAnimationFrame(renderFrame);
+      cancelAnimationFrame(scrollFrame);
+    };
   }, [focusEntryId, focusRequest]);
 
   if (days.length === 0) {
@@ -61,8 +89,7 @@ export function RouteNotesPanel({
             ...day.stops.map((stop) => ({
               id: stop.id,
               name: stop.name,
-              subtitle:
-                stop.itemType === "activity" ? "Activity" : stop.address,
+              subtitle: stop.itemType === "activity" ? null : stop.address,
               notes: stop.description,
               kind: stop.itemType,
               onSave: (notes: string) => onUpdateStopNotes(stop.id, notes),
@@ -72,7 +99,7 @@ export function RouteNotesPanel({
                   {
                     id: stay.id,
                     name: stay.name,
-                    subtitle: "Overnight",
+                    subtitle: null,
                     notes: stay.notes,
                     kind: "overnight" as const,
                     onSave: (notes: string) =>
@@ -142,6 +169,13 @@ export function RouteNotesPanel({
                       <li
                         key={entry.id}
                         id={`route-note-${entry.id}`}
+                        ref={(element) => {
+                          if (element) {
+                            entryRefs.current.set(entry.id, element);
+                          } else {
+                            entryRefs.current.delete(entry.id);
+                          }
+                        }}
                         className={
                           "relative grid scroll-mt-24 grid-cols-[40px_minmax(0,1fr)] gap-4 rounded-[16px] pb-8 transition-colors last:pb-0 " +
                           (focusEntryId === entry.id
@@ -202,19 +236,94 @@ function EditableMarkdown({
   emptyLabel: string;
   onSave: (value: string) => Promise<boolean>;
 }) {
+  const parsedNote = parseNoteValue(value);
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(value);
+  const [draft, setDraft] = useState(parsedNote.text);
   const [saving, setSaving] = useState(false);
+  const [addingLink, setAddingLink] = useState(false);
+  const [linkLabel, setLinkLabel] = useState("");
+  const [linkUrl, setLinkUrl] = useState("");
+  const [linkError, setLinkError] = useState<string | null>(null);
+  const [resolvingTitle, setResolvingTitle] = useState(false);
 
   useEffect(() => {
-    if (!editing) setDraft(value);
-  }, [editing, value]);
+    if (!editing) setDraft(parsedNote.text);
+  }, [editing, parsedNote.text]);
+
+  useEffect(() => {
+    if (!addingLink || linkLabel.trim() || !normalizeHttpUrl(linkUrl)) return;
+    const controller = new AbortController();
+    setResolvingTitle(true);
+    const timeout = window.setTimeout(async () => {
+      try {
+        const response = await fetch(
+          `/api/link-preview?url=${encodeURIComponent(linkUrl.trim())}`,
+          { signal: controller.signal },
+        );
+        const result = (await response.json()) as { title?: unknown };
+        if (typeof result.title === "string" && result.title.trim()) {
+          const title = result.title.trim().slice(0, 100);
+          setLinkLabel((current) => current || title);
+        }
+      } catch {
+        // The user can still enter a name manually when preview fetching fails.
+      } finally {
+        if (!controller.signal.aborted) setResolvingTitle(false);
+      }
+    }, 500);
+
+    return () => {
+      window.clearTimeout(timeout);
+      controller.abort();
+      setResolvingTitle(false);
+    };
+  }, [addingLink, linkLabel, linkUrl]);
 
   async function save() {
     setSaving(true);
-    const success = await onSave(draft);
+    const success = await onSave(serializeNoteValue(draft, parsedNote.links));
     setSaving(false);
     if (success) setEditing(false);
+  }
+
+  async function addLink() {
+    const url = normalizeHttpUrl(linkUrl);
+    if (!url) {
+      setLinkError("Enter a valid http:// or https:// address.");
+      return;
+    }
+    const label =
+      linkLabel.trim() || new URL(url).hostname.replace(/^www\./, "");
+    if (parsedNote.links.length >= 12) {
+      setLinkError("A note can have at most 12 links.");
+      return;
+    }
+
+    setSaving(true);
+    const success = await onSave(
+      serializeNoteValue(parsedNote.text, [
+        ...parsedNote.links,
+        { label: label.slice(0, 100), url },
+      ]),
+    );
+    setSaving(false);
+    if (!success) return;
+    setLinkLabel("");
+    setLinkUrl("");
+    setLinkError(null);
+    setAddingLink(false);
+  }
+
+  async function removeLink(index: number) {
+    setSaving(true);
+    const success = await onSave(
+      serializeNoteValue(
+        parsedNote.text,
+        parsedNote.links.filter((_, linkIndex) => linkIndex !== index),
+      ),
+    );
+    setSaving(false);
+    if (!success) setLinkError("Could not remove the link.");
   }
 
   if (editing) {
@@ -230,7 +339,7 @@ function EditableMarkdown({
               void save();
             }
             if (event.key === "Escape") {
-              setDraft(value);
+              setDraft(parsedNote.text);
               setEditing(false);
             }
           }}
@@ -245,7 +354,7 @@ function EditableMarkdown({
             <button
               type="button"
               onClick={() => {
-                setDraft(value);
+                setDraft(parsedNote.text);
                 setEditing(false);
               }}
               disabled={saving}
@@ -270,22 +379,164 @@ function EditableMarkdown({
   }
 
   return (
-    <div className="group/notes relative pr-9">
-      {value.trim() ? (
-        <SafeMarkdown source={value} />
-      ) : (
-        <p className="text-sm italic text-[#B0A58D]">{emptyLabel}</p>
-      )}
-      <button
-        type="button"
-        onClick={() => setEditing(true)}
-        className="absolute right-0 top-0 grid size-8 place-items-center rounded-[9px] text-[#9B927F] opacity-70 transition hover:bg-[#F0EADB] hover:text-[#5F594D] group-hover/notes:opacity-100"
-        title="Edit notes"
-      >
-        <Pencil className="size-3.5" />
-      </button>
+    <div>
+      <div className="mb-3">
+        <div className="mb-2 flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => {
+              setAddingLink((current) => !current);
+              setLinkError(null);
+            }}
+            disabled={saving}
+            aria-expanded={addingLink}
+            className="flex items-center gap-1.5 rounded-[8px] px-1 py-1 text-[10px] font-black uppercase tracking-[.1em] text-[#9B927F] transition hover:bg-[#FBE7DD] hover:text-[#C6532D] disabled:opacity-50"
+            title={addingLink ? "Close link form" : "Add link"}
+          >
+            <Link2 className="size-3.5" />
+            Links
+          </button>
+        </div>
+
+        {parsedNote.links.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {parsedNote.links.map((link, index) => (
+              <div
+                key={`${link.url}-${index}`}
+                className="group/link inline-flex min-w-0 max-w-full items-center rounded-[10px] border border-[#DDD3BF] bg-[#F7F1E5] shadow-[0_3px_9px_rgba(22,19,13,0.04)]"
+              >
+                <a
+                  href={link.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex min-w-0 items-center gap-1.5 px-2.5 py-1.5 text-xs font-bold text-[#5F594D] transition hover:text-[#C6532D]"
+                  title={link.url}
+                >
+                  <span className="truncate">{link.label}</span>
+                  <ExternalLink className="size-3 shrink-0 opacity-60" />
+                </a>
+                <button
+                  type="button"
+                  onClick={() => void removeLink(index)}
+                  disabled={saving}
+                  className="mr-1 grid size-6 shrink-0 place-items-center rounded-[7px] text-[#A09680] opacity-70 transition hover:bg-white hover:text-[#C6532D] group-hover/link:opacity-100 disabled:opacity-40"
+                  title={`Remove ${link.label}`}
+                  aria-label={`Remove ${link.label}`}
+                >
+                  <Trash2 className="size-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {addingLink && (
+          <div className="grid gap-2 rounded-[12px] border border-[#DDD3BF] bg-[#F8F3E9] p-2.5 sm:grid-cols-[minmax(160px,1fr)_auto]">
+            <input
+              value={linkUrl}
+              maxLength={500}
+              inputMode="url"
+              onChange={(event) => setLinkUrl(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") void addLink();
+              }}
+              placeholder="https://…"
+              aria-label="Link address"
+              className="h-9 min-w-0 rounded-[9px] border border-[#D8CEB8] bg-white px-2.5 font-mono text-xs text-[#403A2F] outline-none focus:ring-2 focus:ring-[#E4562A]/20"
+            />
+            <button
+              type="button"
+              onClick={() => void addLink()}
+              disabled={saving || resolvingTitle}
+              className="inline-flex h-9 items-center justify-center gap-1.5 rounded-[9px] bg-[#16130D] px-3 text-xs font-bold text-white disabled:opacity-50"
+            >
+              {resolvingTitle ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                <Check className="size-3.5" />
+              )}
+              {resolvingTitle ? "Getting title…" : "Add"}
+            </button>
+          </div>
+        )}
+        {linkError && (
+          <p className="mt-1.5 text-[11px] font-semibold text-[#C6532D]">
+            {linkError}
+          </p>
+        )}
+      </div>
+
+      <div className="group/notes relative border-t border-[#E9E0CF] pr-9 pt-3">
+        {parsedNote.text.trim() ? (
+          <SafeMarkdown source={parsedNote.text} />
+        ) : (
+          <p className="text-sm italic text-[#B0A58D]">{emptyLabel}</p>
+        )}
+        <button
+          type="button"
+          onClick={() => setEditing(true)}
+          className="absolute right-0 top-2 grid size-8 place-items-center rounded-[9px] text-[#9B927F] opacity-70 transition hover:bg-[#F0EADB] hover:text-[#5F594D] group-hover/notes:opacity-100"
+          title="Edit notes"
+        >
+          <Pencil className="size-3.5" />
+        </button>
+      </div>
     </div>
   );
+}
+
+type NoteLink = {
+  label: string;
+  url: string;
+};
+
+const NOTE_LINKS_PREFIX = "<!--route-note-links:";
+const NOTE_LINKS_SUFFIX = "-->";
+
+function parseNoteValue(value: string): { text: string; links: NoteLink[] } {
+  if (!value.startsWith(NOTE_LINKS_PREFIX)) return { text: value, links: [] };
+  const metadataEnd = value.indexOf(NOTE_LINKS_SUFFIX);
+  if (metadataEnd < 0) return { text: value, links: [] };
+
+  try {
+    const rawLinks = JSON.parse(
+      value.slice(NOTE_LINKS_PREFIX.length, metadataEnd),
+    );
+    if (!Array.isArray(rawLinks)) return { text: value, links: [] };
+    const links = rawLinks
+      .map((link): NoteLink | null => {
+        if (!link || typeof link !== "object") return null;
+        const record = link as Record<string, unknown>;
+        const label =
+          typeof record.label === "string" ? record.label.trim() : "";
+        const url =
+          typeof record.url === "string" ? normalizeHttpUrl(record.url) : null;
+        return label && url ? { label, url } : null;
+      })
+      .filter((link): link is NoteLink => link !== null)
+      .slice(0, 12);
+    const text = value.slice(metadataEnd + NOTE_LINKS_SUFFIX.length);
+    return { text: text.replace(/^\r?\n/, ""), links };
+  } catch {
+    return { text: value, links: [] };
+  }
+}
+
+function serializeNoteValue(text: string, links: NoteLink[]) {
+  if (links.length === 0) return text;
+  const metadata = `${NOTE_LINKS_PREFIX}${JSON.stringify(links)}${NOTE_LINKS_SUFFIX}\n`;
+  return `${metadata}${text}`;
+}
+
+function normalizeHttpUrl(value: string) {
+  try {
+    const url = new URL(value.trim());
+    return url.protocol === "http:" || url.protocol === "https:"
+      ? url.toString()
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 function SafeMarkdown({ source }: { source: string }) {
