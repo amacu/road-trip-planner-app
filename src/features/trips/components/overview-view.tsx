@@ -18,6 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { LogoMark } from "@/components/shared/app-logo";
 import { FuelOverviewCard } from "@/features/fuel/components/fuel-overview-card";
 import type { FuelPlan } from "@/features/fuel/lib/fuel-plan";
 import { MapView } from "@/features/trip-stops/components/map-view";
@@ -51,6 +52,7 @@ export function OverviewView({
   onSaveTrip,
   onDeleteTrip,
   onSelectDay,
+  onLogoClick,
 }: {
   trip: TripPlain;
   days: TripPlain["days"];
@@ -63,6 +65,7 @@ export function OverviewView({
   onSaveTrip: (patch: TripUpdateInput) => Promise<void>;
   onDeleteTrip: () => void;
   onSelectDay: (dayId: string) => void;
+  onLogoClick: () => void;
 }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const allStops = days.flatMap((day) => day.stops);
@@ -102,23 +105,52 @@ export function OverviewView({
   ];
 
   return (
-    <div className="grid min-h-0 flex-1 gap-0 lg:grid-cols-2">
-      <div className="relative min-h-0 overflow-y-auto p-5 md:p-10">
+    <div className="flex min-h-0 flex-1 flex-col bg-[#FFFAF0] lg:grid lg:grid-cols-2">
+      <header className="relative z-20 flex min-h-[calc(76px+env(safe-area-inset-top))] shrink-0 items-center justify-between bg-[#FBF8F1] px-4 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top))] shadow-[0_12px_28px_-22px_rgba(22,19,13,0.75)] lg:hidden">
+        <button
+          type="button"
+          onClick={onLogoClick}
+          className="grid size-10 shrink-0 place-items-center rounded-[13px] bg-brand shadow-[0_8px_20px_rgba(228,86,42,0.22)]"
+          title="Open home"
+          aria-label="Open home"
+        >
+          <LogoMark className="size-7" />
+        </button>
+        <div className="ml-2.5 min-w-0 flex-1">
+          <h1 className="truncate text-[18px] font-black leading-tight tracking-[-0.015em]">
+            Overview
+          </h1>
+          <p className="mt-0.5 truncate text-[10px] font-semibold text-[#8A7A68]">
+            {trip.name} · {days.length} {days.length === 1 ? "day" : "days"}
+          </p>
+        </div>
         <button
           type="button"
           onClick={() => setSettingsOpen(true)}
-          className="absolute right-5 top-5 grid size-9 place-items-center rounded-full border border-[#E7DFCE] bg-[#FBF8F1] text-[#6a6353] shadow-sm transition-colors hover:bg-[#FBE7DD] hover:text-[#E4562A] md:right-10 md:top-10"
+          className="grid size-10 shrink-0 place-items-center rounded-[12px] border border-[#D8CEB8] bg-[#F8F4EC] text-[#6a6353] shadow-sm"
+          title="Edit trip settings"
+          aria-label="Edit trip settings"
+        >
+          <Pencil className="size-4" />
+        </button>
+      </header>
+
+      <div className="relative min-h-0 flex-1 overflow-y-auto p-4 pb-[calc(7.5rem+env(safe-area-inset-bottom))] md:p-10">
+        <button
+          type="button"
+          onClick={() => setSettingsOpen(true)}
+          className="absolute right-5 top-5 hidden size-9 place-items-center rounded-full border border-[#E7DFCE] bg-[#FBF8F1] text-[#6a6353] shadow-sm transition-colors hover:bg-[#FBE7DD] hover:text-[#E4562A] md:right-10 md:top-10 md:grid"
           title="Edit trip settings"
         >
           <Pencil className="size-4" />
         </button>
 
-        <div className="mb-[26px] flex items-start justify-between">
+        <div className="mb-5 flex items-start justify-between md:mb-[26px]">
           <div className="min-w-0">
-            <div className="mb-[7px] font-['Hanken_Grotesk'] text-[12.5px] font-bold uppercase tracking-[0.1em] text-[#a89f88]">
+            <div className="mb-[7px] hidden font-['Hanken_Grotesk'] text-[12.5px] font-bold uppercase tracking-[0.1em] text-[#a89f88] md:block">
               Trip overview
             </div>
-            <h1 className="m-0 truncate font-['Bricolage_Grotesque'] text-[40px] font-extrabold leading-none tracking-[-0.03em] text-[#16130D]">
+            <h1 className="m-0 hidden truncate font-['Bricolage_Grotesque'] text-[40px] font-extrabold leading-none tracking-[-0.03em] text-[#16130D] md:block">
               {trip.name}
             </h1>
             <div className="mt-3 flex flex-wrap items-center gap-x-3.5 gap-y-2 font-['Hanken_Grotesk'] text-sm font-medium text-[#6a6353]">
@@ -159,7 +191,7 @@ export function OverviewView({
         </div>
       </div>
 
-      <section className="relative min-h-[400px]">
+      <section className="relative hidden min-h-[400px] lg:block">
         <MapView
           stops={overviewMapStops}
           stopColors={stopColors}

@@ -191,7 +191,7 @@ export function PackingDashboard({
 
   return (
     <section className="mt-[18px]">
-      <div className="rounded-[28px] border border-[#E7DFCE] bg-[#FBF8F1] p-5 shadow-sm md:p-8">
+      <div className="rounded-[20px] border border-[#E7DFCE] bg-[#FBF8F1] p-4 shadow-sm md:rounded-[28px] md:p-8">
         <ListHeading
           icon={<ShoppingCart className="size-5 text-[#E4562A]" />}
           title="Shopping list"
@@ -215,7 +215,7 @@ export function PackingDashboard({
                 onCancel={cancelForm}
               />
             )}
-            <div className="mt-4 grid gap-2.5 sm:grid-cols-3">
+            <div className="mt-4 grid grid-cols-3 gap-2 sm:gap-2.5">
               <SummaryTile
                 label="Bought"
                 value={`${purchasedCount}/${totalShoppingCount}`}
@@ -297,7 +297,7 @@ export function PackingDashboard({
                         statusLabel="bought"
                         mobile
                       >
-                        <div className="space-y-2">
+                        <div className="space-y-1.5">
                           {categoryItems.map((item) => (
                             <ShoppingCard
                               key={item.id}
@@ -336,7 +336,7 @@ export function PackingDashboard({
         )}
       </div>
 
-      <div className="mt-5 rounded-[28px] border border-[#E7DFCE] bg-[#FBF8F1] p-5 shadow-sm md:p-8">
+      <div className="mt-4 rounded-[20px] border border-[#E7DFCE] bg-[#FBF8F1] p-4 shadow-sm md:mt-5 md:rounded-[28px] md:p-8">
         <ListHeading
           icon={<PackageCheck className="size-5 text-[#2E7A57]" />}
           title="Packing list"
@@ -360,7 +360,7 @@ export function PackingDashboard({
                 onCancel={cancelForm}
               />
             )}
-            <div className="mt-4 grid gap-2.5 sm:grid-cols-2">
+            <div className="mt-4 grid grid-cols-2 gap-2 sm:gap-2.5">
               <SummaryTile
                 label="Packed"
                 value={`${packedCount}/${packingItems.length}`}
@@ -445,7 +445,7 @@ export function PackingDashboard({
                       statusLabel="packed"
                       mobile
                     >
-                      <div className="space-y-2">
+                      <div className="space-y-1.5">
                         {categoryItems.map((item) => (
                           <PackingCard
                             key={item.id}
@@ -749,68 +749,91 @@ function ShoppingCard({
   onUpdate: (input: TripPackingItemUpdateInput) => Promise<boolean>;
   onDelete: () => void;
 }) {
+  const [detailsOpen, setDetailsOpen] = useState(false);
+
   return (
     <div
-      className={`group rounded-2xl border border-[#E7DFCE] p-3.5 ${
+      className={`group rounded-[13px] border border-[#E7DFCE] px-2.5 py-2 ${
         item.isPurchased ? "bg-[#F4F7F2]" : "bg-[#fffaf0]"
       }`}
     >
-      <div className="flex items-start gap-3">
+      <div className="flex min-w-0 items-center gap-1.5">
         <PackCheckbox
           checked={item.isPurchased}
           onClick={onPurchase}
           uncheckedLabel="Mark as bought"
           checkedLabel="Mark as not bought"
         />
-        <div className="min-w-0 flex-1">
-          <div className="flex items-start gap-2">
-            <InlineText
-              value={item.name}
-              disabled={item.isPurchased}
-              ariaLabel="Item name"
-              className={`flex-1 font-bold ${
-                item.isPurchased ? "line-through text-[#8A8270]" : ""
-              }`}
-              onCommit={(name) => name.trim() && void onUpdate({ name })}
-            />
-            <PriceInput
-              value={item.price}
-              disabled={item.isPurchased}
-              onCommit={(price) => void onUpdate({ price })}
-            />
-            <ProductLinksButton
-              links={item.productLinks}
-              locked={item.isPurchased}
-              onUpdate={(productLinks) => void onUpdate({ productLinks })}
-            />
-          </div>
-          <div className="mt-2 grid grid-cols-2 gap-2">
+        <InlineText
+          value={item.name}
+          disabled={item.isPurchased}
+          ariaLabel="Item name"
+          className={`flex-1 truncate px-1 text-[13px] font-bold ${
+            item.isPurchased ? "line-through text-[#8A8270]" : ""
+          }`}
+          onCommit={(name) => name.trim() && void onUpdate({ name })}
+        />
+        <span className="shrink-0 text-[10px] font-bold text-[#A49B87]">×</span>
+        <div className="w-8 shrink-0">
+          <InlineNumber
+            value={item.quantity}
+            disabled={item.isPurchased}
+            onCommit={(quantity) => void onUpdate({ quantity })}
+          />
+        </div>
+        <div className="w-[72px] shrink-0">
+          <PriceInput
+            value={item.price}
+            disabled={item.isPurchased}
+            onCommit={(price) => void onUpdate({ price })}
+          />
+        </div>
+        <button
+          type="button"
+          onClick={() => setDetailsOpen((current) => !current)}
+          className="grid size-7 shrink-0 place-items-center rounded-[8px] text-[#8A8270] hover:bg-[#F0EADB]"
+          aria-label={detailsOpen ? "Hide item details" : "Show item details"}
+          aria-expanded={detailsOpen}
+        >
+          <ChevronDown
+            className={`size-3.5 transition-transform ${
+              detailsOpen ? "rotate-180" : ""
+            }`}
+          />
+        </button>
+      </div>
+
+      {detailsOpen && (
+        <div className="mt-2 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-1.5 border-t border-[#E9E0CF] pt-2">
+          <div className="grid min-w-0 grid-cols-[110px_minmax(0,1fr)] gap-1">
             <InlineSelect
               value={item.category}
               disabled={item.isPurchased}
               ariaLabel="Category"
               options={categories.map((value) => ({ value, label: value }))}
               onChange={(category) => void onUpdate({ category })}
-              className="px-3 text-center font-bold"
+              className="px-1.5 text-center text-[10px] font-bold"
               style={categoryInputStyle(categoryColor)}
             />
-            <InlineNumber
-              value={item.quantity}
+            <InlineText
+              value={item.notes ?? ""}
               disabled={item.isPurchased}
-              onCommit={(quantity) => void onUpdate({ quantity })}
+              ariaLabel="Note"
+              placeholder="Add note"
+              className="w-full px-1 text-[10px] text-[#7a7264]"
+              onCommit={(notes) => void onUpdate({ notes })}
             />
           </div>
-          <InlineText
-            value={item.notes ?? ""}
-            disabled={item.isPurchased}
-            ariaLabel="Note"
-            placeholder="Add note"
-            className="mt-2 text-xs text-[#7a7264]"
-            onCommit={(notes) => void onUpdate({ notes })}
-          />
+          <div className="flex items-center">
+            <ProductLinksButton
+              links={item.productLinks}
+              locked={item.isPurchased}
+              onUpdate={(productLinks) => void onUpdate({ productLinks })}
+            />
+            {!item.isPurchased && <RowActions onDelete={onDelete} />}
+          </div>
         </div>
-        {!item.isPurchased && <RowActions onDelete={onDelete} />}
-      </div>
+      )}
     </div>
   );
 }
@@ -893,52 +916,75 @@ function PackingCard({
   onDelete: () => void;
 }) {
   const locked = item.isPacked || item.isPurchased;
+  const [detailsOpen, setDetailsOpen] = useState(false);
 
   return (
     <div
-      className={`group rounded-2xl border border-[#E7DFCE] p-3.5 ${
+      className={`group rounded-[13px] border border-[#E7DFCE] px-2.5 py-2 ${
         item.isPacked ? "bg-[#F4F7F2]" : "bg-[#fffaf0]"
       }`}
     >
-      <div className="flex items-start gap-3">
+      <div className="flex min-w-0 items-center gap-1.5">
         <PackCheckbox checked={item.isPacked} onClick={onToggle} />
-        <div className="min-w-0 flex-1">
-          <InlineText
-            value={item.name}
+        <InlineText
+          value={item.name}
+          disabled={locked}
+          ariaLabel="Item name"
+          className={`flex-1 truncate px-1 text-[13px] font-bold ${item.isPacked ? "line-through text-[#8a8270]" : ""}`}
+          onCommit={(name) => name.trim() && void onUpdate({ name })}
+        />
+        <span className="shrink-0 text-[10px] font-bold text-[#A49B87]">×</span>
+        <div className="w-8 shrink-0">
+          <InlineNumber
+            value={item.quantity}
             disabled={locked}
-            ariaLabel="Item name"
-            className={`font-bold ${item.isPacked ? "line-through text-[#8a8270]" : ""}`}
-            onCommit={(name) => name.trim() && void onUpdate({ name })}
+            onCommit={(quantity) => void onUpdate({ quantity })}
           />
-          <div className="mt-2 grid grid-cols-2 gap-2">
+        </div>
+        <button
+          type="button"
+          onClick={() => setDetailsOpen((current) => !current)}
+          className="grid size-7 shrink-0 place-items-center rounded-[8px] text-[#8A8270] hover:bg-[#F0EADB]"
+          aria-label={detailsOpen ? "Hide item details" : "Show item details"}
+          aria-expanded={detailsOpen}
+        >
+          <ChevronDown
+            className={`size-3.5 transition-transform ${
+              detailsOpen ? "rotate-180" : ""
+            }`}
+          />
+        </button>
+      </div>
+
+      {detailsOpen && (
+        <div className="mt-2 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-1.5 border-t border-[#E9E0CF] pt-2">
+          <div className="grid min-w-0 grid-cols-[110px_minmax(0,1fr)] gap-1">
             <InlineSelect
               value={item.category}
               disabled={locked}
               ariaLabel="Category"
               options={categories.map((value) => ({ value, label: value }))}
               onChange={(category) => void onUpdate({ category })}
-              className="px-3 text-center font-bold"
+              className="px-1.5 text-center text-[10px] font-bold"
               style={categoryInputStyle(categoryColor)}
             />
-            <InlineNumber
-              value={item.quantity}
+            <InlineText
+              value={item.notes ?? ""}
               disabled={locked}
-              onCommit={(quantity) => void onUpdate({ quantity })}
+              ariaLabel="Note"
+              placeholder="Add note"
+              className="w-full px-1 text-[10px] text-[#7a7264]"
+              onCommit={(notes) => void onUpdate({ notes })}
             />
           </div>
-          <InlineText
-            value={item.notes ?? ""}
-            disabled={locked}
-            ariaLabel="Note"
-            placeholder="Add note"
-            className="mt-2 text-xs text-[#7a7264]"
-            onCommit={(notes) => void onUpdate({ notes })}
-          />
+          {!locked && (
+            <RowActions
+              onDelete={onDelete}
+              onMoveToShopping={onMoveToShopping}
+            />
+          )}
         </div>
-        {!locked && (
-          <RowActions onDelete={onDelete} onMoveToShopping={onMoveToShopping} />
-        )}
-      </div>
+      )}
     </div>
   );
 }
@@ -1213,14 +1259,14 @@ function RowActions({
   onMoveToShopping?: () => void;
 }) {
   return (
-    <div className="flex justify-end gap-1">
+    <div className="flex justify-end gap-0.5 md:gap-1">
       {onMoveToShopping && (
         <button
           type="button"
           onClick={onMoveToShopping}
           aria-label="Move to shopping list"
           title="Move to shopping list"
-          className="grid size-8 place-items-center rounded-[9px] text-[#B3A994] opacity-0 transition-[color,background-color,opacity] hover:bg-[#F0EADB] hover:text-[#6A6353] group-hover:opacity-100 focus:opacity-100"
+          className="grid size-7 place-items-center rounded-[8px] text-[#B3A994] opacity-100 transition-[color,background-color,opacity] hover:bg-[#F0EADB] hover:text-[#6A6353] md:size-8 md:rounded-[9px] md:opacity-0 md:group-hover:opacity-100 md:focus:opacity-100"
         >
           <ShoppingCart className="size-3.5" />
         </button>
@@ -1229,7 +1275,7 @@ function RowActions({
         type="button"
         onClick={onDelete}
         aria-label="Delete item"
-        className="grid size-8 place-items-center rounded-[9px] text-[#B3A994] opacity-0 transition-[color,background-color,opacity] hover:bg-[#F0EADB] hover:text-[#B8431F] group-hover:opacity-100 focus:opacity-100"
+        className="grid size-7 place-items-center rounded-[8px] text-[#B3A994] opacity-100 transition-[color,background-color,opacity] hover:bg-[#F0EADB] hover:text-[#B8431F] md:size-8 md:rounded-[9px] md:opacity-0 md:group-hover:opacity-100 md:focus:opacity-100"
       >
         <Trash2 className="size-3.5" />
       </button>
@@ -1621,7 +1667,7 @@ function ListHeading({
   onToggleCollapsed: () => void;
 }) {
   return (
-    <div className="relative flex items-start justify-between gap-4">
+    <div className="relative flex min-h-8 min-w-0 items-center justify-between gap-2 md:items-start md:gap-4">
       <button
         type="button"
         onClick={onToggleCollapsed}
@@ -1629,18 +1675,18 @@ function ListHeading({
         aria-expanded={!collapsed}
         className="absolute inset-0 z-0 cursor-pointer rounded-[16px]"
       />
-      <div className="pointer-events-none relative z-[1]">
-        <div className="flex items-center gap-2">
+      <div className="pointer-events-none relative z-[1] min-w-0">
+        <div className="flex items-center gap-1.5 md:gap-2">
           {icon}
-          <h3 className="m-0 font-['Bricolage_Grotesque'] text-[22px] font-extrabold tracking-[-0.025em]">
+          <h3 className="m-0 truncate font-['Bricolage_Grotesque'] text-[17px] font-extrabold tracking-[-0.02em] md:text-[22px] md:tracking-[-0.025em]">
             {title}
           </h3>
         </div>
-        <p className="mt-1 text-[13px] font-medium text-[#8a8270]">
+        <p className="mt-1 hidden text-[13px] font-medium text-[#8a8270] sm:block">
           {subtitle}
         </p>
       </div>
-      <div className="relative z-[1] flex shrink-0 items-center gap-2">
+      <div className="relative z-[1] flex shrink-0 items-center gap-1 md:gap-2">
         <span className="hidden text-xs font-semibold text-[#8A8270] sm:inline">
           {summary}
         </span>
@@ -1649,7 +1695,7 @@ function ListHeading({
           onClick={onToggleCollapsed}
           aria-label={collapsed ? `Expand ${title}` : `Collapse ${title}`}
           aria-expanded={!collapsed}
-          className="grid size-10 place-items-center rounded-[13px] border border-[#D8CEB8] bg-transparent text-[#6A6353] transition-colors hover:bg-[#F0EADB]"
+          className="hidden size-10 place-items-center rounded-[13px] border border-[#D8CEB8] bg-transparent text-[#6A6353] transition-colors hover:bg-[#F0EADB] md:grid"
         >
           <ChevronDown
             className={`size-4 transition-transform ${
@@ -1662,17 +1708,19 @@ function ListHeading({
           onClick={onManageCategories}
           aria-label="Manage categories"
           title="Manage categories"
-          className="grid size-10 place-items-center rounded-[13px] border border-[#D8CEB8] bg-transparent text-[#6A6353] transition-colors hover:bg-[#F0EADB]"
+          className="grid size-8 place-items-center rounded-[10px] border border-[#D8CEB8] bg-transparent text-[#6A6353] transition-colors hover:bg-[#F0EADB] md:size-10 md:rounded-[13px]"
         >
           <Settings2 className="size-4" />
         </button>
         <button
           type="button"
           onClick={onAdd}
-          className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-[13px] bg-[#16130D] px-4 text-sm font-bold text-white shadow-sm transition-transform hover:-translate-y-px"
+          className="inline-flex size-8 shrink-0 items-center justify-center gap-2 rounded-[10px] bg-[#16130D] text-sm font-bold text-white shadow-sm transition-transform hover:-translate-y-px md:h-10 md:w-auto md:rounded-[13px] md:px-4"
         >
           {adding ? <X className="size-4" /> : <Plus className="size-4" />}
-          {adding ? "Cancel" : "Add item"}
+          <span className="hidden md:inline">
+            {adding ? "Cancel" : "Add item"}
+          </span>
         </button>
       </div>
     </div>
@@ -1698,7 +1746,7 @@ function CategoryGroup({
 }) {
   const [collapsed, setCollapsed] = useState(false);
   return (
-    <section className="mt-6 first:mt-0">
+    <section className="mt-4 first:mt-0 md:mt-6">
       <button
         type="button"
         onClick={() => setCollapsed((current) => !current)}
@@ -1817,11 +1865,13 @@ function SummaryTile({
     blue: "bg-[#E8F0F6] text-[#3F6A8C]",
   };
   return (
-    <div className={`rounded-[15px] px-4 py-3.5 ${colors[tone]}`}>
-      <div className="text-[9px] font-bold uppercase tracking-[.08em] opacity-85">
+    <div
+      className={`min-w-0 rounded-[12px] px-2 py-2.5 md:rounded-[15px] md:px-4 md:py-3.5 ${colors[tone]}`}
+    >
+      <div className="truncate text-[8px] font-bold uppercase tracking-[.06em] opacity-85 md:text-[9px] md:tracking-[.08em]">
         {label}
       </div>
-      <div className="mt-1.5 font-['JetBrains_Mono'] text-[22px] font-bold leading-none tracking-[-0.04em] text-[#16130D]">
+      <div className="mt-1 truncate font-['JetBrains_Mono'] text-[13px] font-bold leading-none tracking-[-0.04em] text-[#16130D] sm:text-[15px] md:mt-1.5 md:text-[22px]">
         {value}
       </div>
     </div>

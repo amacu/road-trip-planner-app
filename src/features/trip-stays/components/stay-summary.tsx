@@ -85,10 +85,10 @@ export function StaySummary({
   })).filter(({ count }) => count > 0);
 
   return (
-    <section className="mb-[22px] rounded-[22px] border border-[#E7DFCE] bg-[#FBF8F1] p-6">
+    <section className="mb-4 rounded-[20px] border border-[#E7DFCE] bg-[#FBF8F1] p-4 shadow-sm md:mb-[22px] md:rounded-[22px] md:p-6 md:shadow-none">
       <div
-        className={`relative flex flex-wrap items-start justify-between gap-3 ${
-          collapsed ? "" : "mb-5"
+        className={`relative flex min-h-8 flex-wrap items-center justify-between gap-3 md:items-start ${
+          collapsed ? "" : "mb-4 md:mb-5"
         }`}
       >
         <button
@@ -99,19 +99,19 @@ export function StaySummary({
           className="absolute inset-0 z-0 cursor-pointer rounded-[16px]"
         />
         <div className="pointer-events-none relative z-[1]">
-          <div className="mb-1 flex items-center gap-2">
+          <div className="flex items-center gap-2 md:mb-1">
             <Moon className="size-4 text-[#6E9BC0]" />
-            <h2 className="font-['Bricolage_Grotesque'] text-lg font-bold tracking-[-0.02em]">
+            <h2 className="font-['Bricolage_Grotesque'] text-[17px] font-extrabold tracking-[-0.02em] md:text-lg md:font-bold">
               Nights
             </h2>
           </div>
-          <p className="text-[13px] font-medium text-[#8a8270]">
+          <p className="hidden max-w-[180px] text-[11px] font-medium leading-snug text-[#8a8270] md:block md:max-w-none md:text-[13px]">
             Accommodation across the whole trip
           </p>
         </div>
-        <div className="pointer-events-none relative z-[1] flex items-center gap-3">
+        <div className="pointer-events-none relative z-[1] hidden items-center gap-3 md:flex">
           <div className="text-right">
-            <div className="font-['JetBrains_Mono'] text-3xl font-bold leading-none text-[#16130D]">
+            <div className="font-['JetBrains_Mono'] text-2xl font-bold leading-none text-[#16130D] md:text-3xl">
               {stays.length}
             </div>
             <div className="mt-1 text-[11px] font-semibold text-[#948b76]">
@@ -136,24 +136,24 @@ export function StaySummary({
 
       {!collapsed && (
         <>
-          <div className="grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-3">
+          <div className="grid grid-cols-2 gap-2.5 md:grid-cols-[repeat(auto-fit,minmax(140px,1fr))] md:gap-3">
             {stayTypesWithNights.map(
               ({ type, label, icon: Icon, color, bg, count }) => (
                 <div
                   key={type}
-                  className="flex items-center gap-3 rounded-[15px] bg-[#F3EFE4] px-4 py-3.5"
+                  className="flex min-w-0 items-center gap-2 rounded-[13px] bg-[#F3EFE4] px-3 py-3 md:gap-3 md:rounded-[15px] md:px-4 md:py-3.5"
                 >
                   <div
-                    className="grid size-10 shrink-0 place-items-center rounded-[10px]"
+                    className="grid size-8 shrink-0 place-items-center rounded-[9px] md:size-10 md:rounded-[10px]"
                     style={{ color, background: bg }}
                   >
-                    <Icon className="size-[18px]" />
+                    <Icon className="size-4 md:size-[18px]" />
                   </div>
                   <div>
                     <div className="text-[9px] font-bold uppercase tracking-[.08em] text-[#7a7264]">
                       {label}
                     </div>
-                    <div className="mt-1.5 font-['JetBrains_Mono'] text-[22px] font-bold leading-none tracking-[-0.04em] text-[#16130D]">
+                    <div className="mt-1 font-['JetBrains_Mono'] text-lg font-bold leading-none tracking-[-0.04em] text-[#16130D] md:mt-1.5 md:text-[22px]">
                       {count}
                     </div>
                   </div>
@@ -168,12 +168,12 @@ export function StaySummary({
                 type="button"
                 onClick={() => setDetailsExpanded((current) => !current)}
                 aria-expanded={detailsExpanded}
-                className="flex w-full items-center justify-between gap-4 py-4 text-left text-[13px] font-bold text-[#7a7264]"
+                className="flex w-full flex-col items-start justify-between gap-1.5 py-3 text-left text-[11px] font-bold text-[#7a7264] sm:flex-row sm:items-center sm:gap-4 md:py-4 md:text-[13px]"
               >
                 <span>
                   {booked} of {stays.length} booked or paid
                 </span>
-                <span className="flex items-center gap-2">
+                <span className="flex max-w-full items-center gap-2">
                   <span>
                     {Math.round(totalCost).toLocaleString("pl-PL")}{" "}
                     {summaryCurrency} accommodation

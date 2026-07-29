@@ -130,17 +130,17 @@ export function StopCard({
     <li
       className={cn(
         "group relative transition-[margin] duration-200",
-        isWalkingExcursion && "ml-16",
+        isWalkingExcursion && "ml-8 sm:ml-16",
         hiddenWalkingExcursionCount > 0 && "mb-3",
         showDriveSpine &&
-          "before:absolute before:bottom-0 before:left-[-46px] before:top-0 before:border-l before:border-dashed before:border-[#D1C7B2]",
+          "before:absolute before:bottom-0 before:left-[-14px] before:top-0 before:border-l before:border-dashed before:border-[#D1C7B2] sm:before:left-[-46px]",
       )}
     >
       {hiddenWalkingExcursionCount > 0 && (
         <button
           type="button"
           onClick={onExpandWalkingExcursions}
-          className="absolute -bottom-3 left-16 right-0 h-6 rounded-b-[16px] border border-t-0 border-[#CFC1E5] bg-[#EAE4F3] shadow-[0_7px_15px_rgba(124,92,191,0.09)] transition-colors hover:border-[#B9A6D8] hover:bg-[#E3DAF0] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9B82C8]"
+          className="absolute -bottom-3 left-8 right-0 h-6 rounded-b-[16px] border border-t-0 border-[#CFC1E5] bg-[#EAE4F3] shadow-[0_7px_15px_rgba(124,92,191,0.09)] transition-colors hover:border-[#B9A6D8] hover:bg-[#E3DAF0] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9B82C8] sm:left-16"
           title={`Show ${hiddenWalkingExcursionCount} walking ${
             hiddenWalkingExcursionCount === 1 ? "excursion" : "excursions"
           }`}

@@ -4,12 +4,9 @@ import {
   Calendar,
   Check,
   ChevronDown,
-  Clock,
   Compass,
-  Fuel,
   LayoutDashboard,
   Map as MapIcon,
-  MapPin,
   MapPinned,
   NotebookText,
   Plus,
@@ -22,6 +19,7 @@ import { flushSync } from "react-dom";
 import { toast } from "sonner";
 
 import { CollapsedSidebar } from "@/components/layout/collapsed-sidebar";
+import { LogoMark } from "@/components/shared/app-logo";
 import { FuelDashboard } from "@/features/fuel/components/fuel-dashboard";
 import { HomeScreen } from "@/features/home/components/home-screen";
 import {
@@ -82,7 +80,6 @@ import type {
   VehiclePlain,
 } from "@/features/trips/lib/trip-view-model";
 import { useRouteMetrics } from "@/features/trips/hooks/use-route-metrics";
-import { formatDistance, formatDuration } from "@/lib/geo";
 import type { GeocodeResult } from "@/lib/integrations/geocode";
 import type { FuelCountryPrice } from "@/lib/integrations/fuel-prices";
 import { openInGoogleMaps } from "@/lib/integrations/google-maps";
@@ -93,7 +90,7 @@ import type {
   TripPackingItemInput,
   TripPackingItemUpdateInput,
 } from "@/lib/validators/trip-packing-item";
-import { randomId } from "@/lib/utils";
+import { cn, randomId } from "@/lib/utils";
 
 type TabKey = "overview" | "planner" | "fuel";
 type ViewKey = TabKey | "landing";
@@ -270,6 +267,9 @@ export function PlannerView({
   // and shows its activities as extra pins while it's selected.
   const [selectedStopId, setSelectedStopId] = useState<string | null>(null);
   const [tab, setTab] = useState<ViewKey>("overview");
+  const [mobilePlannerPane, setMobilePlannerPane] = useState<
+    "itinerary" | "map" | "notes"
+  >("itinerary");
   const [fuelPrices] = useState<FuelCountryPrice[]>(initialFuelPrices);
   const discardedOptimisticStopIds = useRef(new Set<string>());
   const discardedOptimisticActivityIds = useRef(new Set<string>());
@@ -428,10 +428,6 @@ export function PlannerView({
   const endStayLeg = hasEndStayAnchor
     ? currentMetric?.legs[regularLegOffset + currentStops.length - 1]
     : undefined;
-  const distanceKm = currentMetric?.distanceKm ?? 0;
-  const driveMin = currentMetric?.driveMin ?? 0;
-  const fuelPln = estimateFuelCostPln(distanceKm, fuelPrices, selectedVehicle);
-
   const tripTotalKm = days.reduce(
     (sum, day) => sum + (dayMetrics[day.id]?.distanceKm ?? 0),
     0,
@@ -755,6 +751,7 @@ export function PlannerView({
     setActiveDayId(dayId);
     setShowAllDays(false);
     setSelectedStopId(null);
+    setMobilePlannerPane("itinerary");
     setTab("planner");
   }
 
@@ -1443,7 +1440,13 @@ export function PlannerView({
   }
 
   return (
-    <div className="flex h-screen bg-[#EEE8DC] text-foreground">
+    <div className="flex h-dvh w-full max-w-full overflow-x-hidden bg-[#EEE8DC] text-foreground">
+      {tab !== "landing" && (
+        <div
+          aria-hidden
+          className="pointer-events-none fixed inset-x-0 top-0 z-[1100] h-[env(safe-area-inset-top)] bg-[#FBF8F1] md:hidden"
+        />
+      )}
       {tab !== "landing" && (
         <CollapsedSidebar
           userFullName={currentUserFullName}
@@ -1481,37 +1484,48 @@ export function PlannerView({
             onSaveTrip={handleSaveTrip}
             onDeleteTrip={handleDeleteTrip}
             onSelectDay={openDayInPlanner}
+            onLogoClick={() => setTab("landing")}
           />
         )}
 
         {tab === "planner" && (
           <div
-            className={`grid min-h-0 flex-1 gap-0 ${
+            className={`flex min-h-0 min-w-0 max-w-full flex-1 flex-col gap-0 overflow-x-hidden bg-[#FFFAF0] lg:grid lg:bg-none ${
               showAllDays
                 ? "lg:grid-cols-[280px_1fr]"
                 : "lg:grid-cols-[280px_minmax(420px,460px)_1fr]"
             }`}
           >
-            <div className="flex min-h-0 flex-col border-r border-[#E4DBC8] bg-[#FBF8F1]">
-              <header className="relative z-10 flex min-h-[70px] shrink-0 items-center justify-between gap-3 border-b border-[#E4DBC8]/90 bg-[#FBF8F1]/95 px-3.5 py-3 shadow-[0_10px_24px_-18px_rgba(22,19,13,0.75)] backdrop-blur-md">
+            <div className="relative z-20 flex min-h-0 min-w-0 max-w-full flex-col overflow-hidden border-[#E4DBC8] bg-[#FBF8F1] shadow-[0_12px_28px_-22px_rgba(22,19,13,0.75)] lg:z-auto lg:border-r lg:shadow-none">
+              <header className="relative z-10 flex min-h-[calc(76px+env(safe-area-inset-top))] shrink-0 items-center justify-between gap-3 bg-transparent pb-2.5 pl-4 pr-[156px] pt-[calc(0.875rem+env(safe-area-inset-top))] lg:min-h-[70px] lg:border-b lg:border-[#E4DBC8]/90 lg:bg-[#FBF8F1]/95 lg:px-3.5 lg:py-3 lg:shadow-[0_10px_24px_-18px_rgba(22,19,13,0.75)] lg:backdrop-blur-md">
                 <div className="flex min-w-0 items-center gap-2.5">
-                  <span className="grid size-9 shrink-0 place-items-center rounded-[12px] bg-brand text-brand-foreground shadow-[0_8px_18px_rgba(228,86,42,0.24)]">
+                  <button
+                    type="button"
+                    onClick={() => setTab("landing")}
+                    className="grid size-10 shrink-0 place-items-center rounded-[13px] bg-brand shadow-[0_8px_20px_rgba(228,86,42,0.22)] lg:hidden"
+                    title="Open home"
+                    aria-label="Open home"
+                  >
+                    <LogoMark className="size-7" />
+                  </button>
+                  <span className="hidden size-9 shrink-0 place-items-center rounded-[12px] bg-brand text-brand-foreground shadow-[0_8px_18px_rgba(228,86,42,0.24)] lg:grid">
                     <MapPinned className="size-[18px]" />
                   </span>
                   <div className="min-w-0">
-                    <h2 className="truncate text-[15px] font-black leading-tight text-foreground">
+                    <h2 className="truncate text-[18px] font-black leading-tight tracking-[-0.015em] text-foreground lg:text-[15px] lg:tracking-normal">
                       Planner
                     </h2>
-                    <p className="mt-0.5 text-[10px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
+                    <p className="mt-0.5 truncate text-[10px] font-semibold text-[#8A7A68] lg:text-[10px] lg:font-bold lg:uppercase lg:tracking-[0.1em] lg:text-muted-foreground">
+                      <span className="lg:hidden">{trip.name} · </span>
                       {days.length} {days.length === 1 ? "day" : "days"}
                     </p>
                   </div>
                 </div>
-                <div className="flex items-center gap-1.5">
+                <div className="hidden items-center gap-1.5 lg:flex">
                   <button
                     type="button"
                     onClick={() => setTripAiOpen(true)}
-                    className="grid size-[34px] shrink-0 place-items-center rounded-[10px] border border-[#D8CEB8] bg-[#F3EFE4] text-[#8A5F4D] transition-colors hover:border-[#E4562A]/40 hover:bg-[#FBE7DD] hover:text-[#C6532D]"
+                    className="grid size-10 shrink-0 place-items-center rounded-[12px] border border-[#D8CEB8] bg-[#F3EFE4] text-[#8A5F4D] transition-colors hover:border-[#E4562A]/40 hover:bg-[#FBE7DD] hover:text-[#C6532D] lg:size-[34px] lg:rounded-[10px]"
                     title="Export whole trip for AI"
                     aria-label="Export whole trip for AI"
                   >
@@ -1521,7 +1535,7 @@ export function PlannerView({
                     type="button"
                     onClick={addDay}
                     disabled={isAddingDay || isImportingTrip}
-                    className="grid size-[34px] shrink-0 place-items-center rounded-[10px] bg-brand text-brand-foreground shadow-[0_8px_18px_rgba(228,86,42,0.2)] transition-colors hover:bg-[#cf4822] disabled:cursor-default disabled:opacity-60"
+                    className="grid size-11 shrink-0 place-items-center rounded-[14px] bg-brand text-brand-foreground shadow-[0_8px_18px_rgba(228,86,42,0.2)] transition-colors hover:bg-[#cf4822] disabled:cursor-default disabled:opacity-60 lg:size-[34px] lg:rounded-[10px]"
                     title="Add day"
                     aria-label="Add day"
                   >
@@ -1529,7 +1543,34 @@ export function PlannerView({
                   </button>
                 </div>
               </header>
-              <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-3 pb-3 pt-3.5">
+              <div className="order-1 mx-4 grid shrink-0 grid-cols-3 rounded-[12px] border border-white/50 bg-[#E9E2D5]/90 p-1 shadow-sm backdrop-blur lg:hidden">
+                {(
+                  [
+                    ["itinerary", "Itinerary", RouteIcon],
+                    ["map", "Map", MapIcon],
+                    ["notes", "Notes", NotebookText],
+                  ] as const
+                ).map(([pane, label, Icon]) => (
+                  <button
+                    key={pane}
+                    type="button"
+                    onClick={() => {
+                      setMobilePlannerPane(pane);
+                      if (pane !== "itinerary") setRightPanelMode(pane);
+                    }}
+                    className={cn(
+                      "inline-flex h-8 items-center justify-center gap-1.5 rounded-[9px] px-3 text-[11px] font-bold transition-all",
+                      mobilePlannerPane === pane
+                        ? "bg-white text-[#16130D] shadow-sm"
+                        : "text-[#8A8270]",
+                    )}
+                  >
+                    <Icon className="size-3.5" />
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <div className="order-2 flex min-h-0 flex-none snap-x snap-mandatory scroll-px-4 gap-2 overflow-x-auto px-4 pb-4 pt-3 lg:order-none lg:block lg:flex-1 lg:snap-none lg:space-y-2 lg:overflow-x-hidden lg:overflow-y-auto lg:px-3 lg:pb-3 lg:pt-3.5">
                 {days.length === 0 ? (
                   <p className="p-4 text-center text-sm text-muted-foreground">
                     No days yet.
@@ -1560,19 +1601,55 @@ export function PlannerView({
                     );
                   })
                 )}
+                <button
+                  type="button"
+                  onClick={() => setTripAiOpen(true)}
+                  className="flex h-[76px] w-[62px] shrink-0 snap-start flex-col items-center justify-center rounded-[13px] border border-[#DED3C0] bg-[#FAF6EE] px-1 text-center text-[#8A5F4D] shadow-[0_4px_12px_rgba(22,19,13,0.05)] sm:w-[68px] lg:hidden"
+                  title="Open AI trip planner"
+                  aria-label="Open AI trip planner"
+                >
+                  <span className="grid size-7 place-items-center rounded-[9px] bg-[#F3E5DA]">
+                    <Sparkles className="size-4" />
+                  </span>
+                  <span className="mt-1.5 text-[9px] font-black leading-tight">
+                    AI plan
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={addDay}
+                  disabled={isAddingDay || isImportingTrip}
+                  className="flex h-[76px] w-[62px] shrink-0 snap-start flex-col items-center justify-center rounded-[13px] border border-[#E7A58F] bg-[#FBE7DD] px-1 text-center text-brand shadow-[0_4px_12px_rgba(228,86,42,0.08)] disabled:opacity-45 sm:w-[68px] lg:hidden"
+                  title="Add day"
+                  aria-label="Add day"
+                >
+                  <span className="grid size-7 place-items-center rounded-[9px] bg-brand text-brand-foreground">
+                    <Plus className="size-4" />
+                  </span>
+                  <span className="mt-1.5 text-[9px] font-black leading-tight">
+                    Add day
+                  </span>
+                </button>
                 <TripSummaryCard
                   dayCount={days.length}
                   active={showAllDays}
                   onSelect={() => {
                     setShowAllDays(true);
                     setSelectedStopId(null);
+                    setMobilePlannerPane("map");
+                    setRightPanelMode("map");
                   }}
                 />
               </div>
             </div>
 
             {!showAllDays && (
-              <main className="h-full min-h-0 border-r border-[#E4DBC8] bg-[#FFFAF0]">
+              <main
+                className={cn(
+                  "h-full min-h-0 min-w-0 max-w-full flex-1 overflow-hidden bg-transparent lg:block lg:border-r lg:border-[#E4DBC8] lg:bg-[#FFFAF0]",
+                  mobilePlannerPane === "itinerary" ? "block" : "hidden",
+                )}
+              >
                 {currentDay ? (
                   <DayPanel
                     key={currentDay.id}
@@ -1639,11 +1716,15 @@ export function PlannerView({
             )}
 
             <section
-              className={`relative flex min-h-[400px] flex-col ${
-                rightPanelMode === "notes" ? "bg-[#F8F5ED]" : "bg-[#EEEAE1]"
-              }`}
+              className={cn(
+                "relative min-h-0 min-w-0 max-w-full flex-1 flex-col overflow-hidden lg:min-h-[400px] lg:flex",
+                mobilePlannerPane !== "itinerary" || showAllDays
+                  ? "flex"
+                  : "hidden",
+                rightPanelMode === "notes" ? "bg-[#F8F5ED]" : "bg-[#EEEAE1]",
+              )}
             >
-              <div className="absolute left-1/2 top-3 z-[500] grid -translate-x-1/2 grid-cols-2 rounded-[12px] border border-white/50 bg-[#E9E2D5]/90 p-1 shadow-sm backdrop-blur">
+              <div className="absolute left-1/2 top-3 z-[500] hidden -translate-x-1/2 grid-cols-2 rounded-[12px] border border-white/50 bg-[#E9E2D5]/90 p-1 shadow-sm backdrop-blur lg:grid">
                 {(
                   [
                     ["map", "Map", MapIcon],
@@ -1667,7 +1748,7 @@ export function PlannerView({
               </div>
               <div className="relative min-h-0 flex-1">
                 {rightPanelMode === "notes" ? (
-                  <div className="h-full pt-[58px]">
+                  <div className="h-full lg:pt-[58px]">
                     <RouteNotesPanel
                       days={showAllDays ? days : currentDay ? [currentDay] : []}
                       stays={stays}
@@ -1700,31 +1781,6 @@ export function PlannerView({
                     activityPins={selectedStopActivityPins}
                   />
                 )}
-                {rightPanelMode === "map" && (
-                  <MapRouteSummary
-                    title={
-                      showAllDays ? "Whole trip" : `Day ${currentDayIndex + 1}`
-                    }
-                    subtitle={
-                      showAllDays
-                        ? `${days.length} ${days.length === 1 ? "day" : "days"} · Complete route`
-                        : dayRouteLabel(currentStops)
-                    }
-                    distanceKm={showAllDays ? tripTotalKm : distanceKm}
-                    durationMin={showAllDays ? tripTotalMin : driveMin}
-                    fuelPln={showAllDays ? tripFuelPln : fuelPln}
-                    count={showAllDays ? days.length : currentStops.length}
-                    countLabel={
-                      showAllDays
-                        ? days.length === 1
-                          ? "Day"
-                          : "Days"
-                        : currentStops.length === 1
-                          ? "Stop"
-                          : "Stops"
-                    }
-                  />
-                )}
               </div>
             </section>
           </div>
@@ -1742,6 +1798,9 @@ export function PlannerView({
               onUpdatePackingCategories={savePackingCategories}
               onSaveStay={saveStay}
               onDeleteStay={removeStay}
+              tripName={trip.name}
+              dayCount={days.length}
+              onLogoClick={() => setTab("landing")}
             />
           </div>
         )}
@@ -1768,112 +1827,6 @@ export function PlannerView({
       </div>
     </div>
   );
-}
-
-function MapRouteSummary({
-  title,
-  subtitle,
-  distanceKm,
-  durationMin,
-  fuelPln,
-  count,
-  countLabel,
-}: {
-  title: string;
-  subtitle: string;
-  distanceKm: number;
-  durationMin: number;
-  fuelPln: number;
-  count: number;
-  countLabel: string;
-}) {
-  const stats = [
-    {
-      label: "Distance",
-      value: distanceKm > 0 ? formatDistance(distanceKm) : "0 km",
-      Icon: RouteIcon,
-      color: "#E4562A",
-    },
-    {
-      label: "Driving",
-      value: durationMin > 0 ? formatDuration(durationMin) : "—",
-      Icon: Clock,
-      color: "#2E7A57",
-    },
-    {
-      label: "Fuel",
-      value: fuelPln > 0 ? `${Math.round(fuelPln)} PLN` : "—",
-      Icon: Fuel,
-      color: "#5E86A3",
-    },
-    {
-      label: countLabel,
-      value: `${count}`,
-      Icon: MapPin,
-      color: "#8A5F4D",
-    },
-  ];
-
-  return (
-    <aside className="pointer-events-none absolute right-3 top-[64px] z-[500] w-[calc(100%_-_24px)] max-w-[340px] overflow-hidden rounded-[18px] border border-white/60 bg-[#F8F4EC]/92 shadow-[0_14px_36px_rgba(22,19,13,0.16)] backdrop-blur-md">
-      <div className="flex min-w-0 items-center gap-2.5 border-b border-[#E7DFCE]/80 px-3.5 py-3">
-        <span className="grid size-8 shrink-0 place-items-center rounded-[10px] bg-brand text-brand-foreground shadow-[0_6px_14px_rgba(228,86,42,0.22)]">
-          <MapPinned className="size-4" />
-        </span>
-        <div className="min-w-0">
-          <p className="text-[13px] font-black leading-tight text-foreground">
-            {title}
-          </p>
-          <p className="mt-0.5 truncate text-[10px] font-semibold text-muted-foreground">
-            {subtitle}
-          </p>
-        </div>
-      </div>
-      <div className="grid grid-cols-4 divide-x divide-[#DED5C3]/80 px-1 py-2.5">
-        {stats.map(({ label, value, Icon, color }) => (
-          <div
-            key={label}
-            className="flex min-w-0 flex-col items-center px-1.5 text-center"
-          >
-            <div className="flex min-w-0 items-center gap-1">
-              <Icon
-                className="size-3 shrink-0"
-                strokeWidth={2.5}
-                style={{ color }}
-              />
-              <span
-                className="truncate font-mono text-[11px] font-bold text-foreground"
-                title={value}
-              >
-                {value}
-              </span>
-            </div>
-            <span className="mt-1 text-[8px] font-black uppercase tracking-[0.08em] text-[#9A917F]">
-              {label}
-            </span>
-          </div>
-        ))}
-      </div>
-      <div className="flex items-center justify-end gap-3 border-t border-[#E7DFCE]/70 px-3 py-1.5 text-[8px] font-black uppercase tracking-[0.08em] text-[#8F8675]">
-        <span className="inline-flex items-center gap-1.5">
-          <span className="h-0.5 w-5 rounded-full bg-brand" />
-          Drive
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <span className="w-5 border-t-2 border-dashed border-[#2E7A57]" />
-          Walk
-        </span>
-      </div>
-    </aside>
-  );
-}
-
-function dayRouteLabel(stops: StopPoint[]) {
-  const first = stops[0]?.name;
-  const last = stops[stops.length - 1]?.name;
-  if (!first && !last) return "Add stops to build this route";
-  if (first === last) return `${first} · Loop route`;
-  return `${first ?? "Starting point"} → ${last ?? "Destination"}`;
 }
 
 function FloatingTripNav({
@@ -1921,7 +1874,7 @@ function FloatingTripNav({
     <>
       <div
         ref={switcherRef}
-        className="fixed bottom-5 left-1/2 z-[9999] max-w-[calc(100vw-32px)] -translate-x-1/2"
+        className="fixed bottom-3 left-1/2 z-[9999] w-auto max-w-[calc(100vw-24px)] -translate-x-1/2 sm:bottom-5 sm:max-w-[calc(100vw-32px)]"
       >
         {open && (
           <div className="absolute bottom-[calc(100%+10px)] left-0 w-[min(360px,calc(100vw-32px))] overflow-hidden rounded-[24px] border border-border bg-card/98 shadow-[0_18px_50px_rgba(22,19,13,0.24)] backdrop-blur-md">
@@ -1992,15 +1945,17 @@ function FloatingTripNav({
           </div>
         )}
 
-        <nav className="flex items-center gap-1 overflow-x-auto rounded-full border border-border bg-card/95 p-2 shadow-[0_16px_42px_rgba(22,19,13,0.22)] backdrop-blur-md">
+        <nav className="flex w-auto items-center justify-center gap-0.5 overflow-hidden rounded-full border border-border bg-card/95 p-1.5 shadow-[0_16px_42px_rgba(22,19,13,0.22)] backdrop-blur-md sm:justify-start sm:gap-1 sm:overflow-x-auto sm:p-2">
           <button
             type="button"
             onClick={() => setOpen((current) => !current)}
-            className="flex max-w-[210px] shrink-0 items-center gap-2 rounded-full px-4 py-2 text-sm font-black text-foreground transition-colors hover:bg-muted"
+            className="flex min-w-0 shrink-0 items-center gap-0.5 rounded-full px-2.5 py-2 text-sm font-black text-foreground transition-colors hover:bg-muted sm:max-w-[210px] sm:gap-2 sm:px-4"
             aria-expanded={open}
           >
             <RouteIcon className="size-4 shrink-0 text-brand" />
-            <span className="truncate">{currentTrip.name}</span>
+            <span className="hidden truncate sm:inline">
+              {currentTrip.name}
+            </span>
             <ChevronDown
               className={
                 "size-4 shrink-0 text-brand transition-transform " +
@@ -2018,7 +1973,7 @@ function FloatingTripNav({
                 type="button"
                 onClick={() => onSelectTab(key)}
                 className={
-                  "inline-flex shrink-0 items-center gap-2 rounded-full px-5 py-2 text-sm transition-colors " +
+                  "inline-flex shrink-0 items-center gap-2 rounded-full px-2.5 py-2 text-sm transition-colors sm:px-5 " +
                   (activeTab === key
                     ? "bg-brand font-black text-brand-foreground shadow-[0_10px_22px_rgba(228,86,42,0.24)]"
                     : "font-medium text-muted-foreground hover:bg-muted hover:text-foreground")
@@ -2030,7 +1985,7 @@ function FloatingTripNav({
                     (activeTab === key ? "text-brand-foreground" : "text-brand")
                   }
                 />
-                {TAB_LABELS[key]}
+                <span className="hidden sm:inline">{TAB_LABELS[key]}</span>
               </button>
             );
           })}

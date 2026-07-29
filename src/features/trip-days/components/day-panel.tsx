@@ -8,7 +8,6 @@ import {
   Copy,
   Footprints,
   Landmark,
-  ListCollapse,
   Loader2,
   MapPin,
   MessageCircleMore,
@@ -146,9 +145,6 @@ export function DayPanel({
     legs,
     startLeg?.durationMin,
   );
-  const walkingExcursionCount = stops.filter(
-    (stop, stopIndex) => stopIndex > 0 && stop.travelMode === "walking",
-  ).length;
   const lastDepartureTime = schedule[schedule.length - 1]?.departureTime;
   const stayArrivalTime =
     lastDepartureTime && endLeg
@@ -220,8 +216,39 @@ export function DayPanel({
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-[#FFFAF0]">
-      <header className="relative z-10 flex min-h-[70px] shrink-0 items-center border-b border-[#E4DBC8]/90 bg-[#FBF8F1]/95 px-4 py-3 shadow-[0_10px_24px_-18px_rgba(22,19,13,0.75)] backdrop-blur-md">
+    <div className="flex h-full min-h-0 flex-col bg-transparent lg:bg-[#FFFAF0]">
+      <div className="fixed right-4 top-[calc(0.75rem+env(safe-area-inset-top))] z-[1200] flex items-center gap-1.5 lg:hidden">
+        <button
+          type="button"
+          onClick={onLaunchNav}
+          disabled={stops.length < 2}
+          className="grid size-10 place-items-center rounded-[12px] bg-[#16130D] text-white shadow-[0_8px_18px_rgba(22,19,13,0.18)] disabled:cursor-not-allowed disabled:opacity-35"
+          title="Start navigation in Google Maps"
+          aria-label="Start navigation in Google Maps"
+        >
+          <Navigation className="size-4" />
+        </button>
+        <button
+          type="button"
+          onClick={() => setAiImportOpen(true)}
+          className="grid size-10 place-items-center rounded-[12px] border border-[#D8CEB8] bg-[#F8F4EC] text-[#8A5F4D] shadow-sm"
+          title="Import day plan from AI"
+          aria-label="Import day plan from AI"
+        >
+          <Sparkles className="size-4" />
+        </button>
+        <button
+          type="button"
+          onClick={() => setAddingType((value) => value ?? "stop")}
+          className="grid size-10 place-items-center rounded-[12px] bg-brand text-brand-foreground shadow-[0_8px_18px_rgba(228,86,42,0.2)]"
+          title="Add stop or activity"
+          aria-label="Add stop or activity"
+        >
+          <Plus className="size-4" />
+        </button>
+      </div>
+
+      <header className="relative z-10 hidden min-h-[70px] shrink-0 items-center border-b border-[#E4DBC8]/90 bg-[#FBF8F1]/95 px-4 py-3 shadow-[0_10px_24px_-18px_rgba(22,19,13,0.75)] backdrop-blur-md lg:flex">
         <div className="flex w-full items-center justify-between gap-3">
           <div className="flex min-w-0 flex-1 items-center gap-3">
             <span className="grid size-9 shrink-0 place-items-center rounded-[12px] bg-brand text-brand-foreground shadow-[0_8px_18px_rgba(228,86,42,0.24)]">
@@ -250,36 +277,6 @@ export function DayPanel({
             </button>
             <button
               type="button"
-              onClick={() => {
-                if (walkingExcursionsCollapsed) {
-                  setWalkingExcursionsCollapsed(false);
-                } else {
-                  setExpandedWalkingExcursionIds(new Set());
-                  setWalkingExcursionsCollapsed(true);
-                }
-              }}
-              disabled={walkingExcursionCount === 0}
-              className={`grid size-[34px] place-items-center rounded-[10px] border transition-colors disabled:cursor-not-allowed disabled:opacity-35 ${
-                walkingExcursionsCollapsed
-                  ? "border-[#7FA78E] bg-[#E4F0E8] text-[#4F8065]"
-                  : "border-[#D8CEB8] bg-[#F3EFE4] text-[#756D5E] hover:border-[#9CB7A6] hover:bg-[#EAF2EC] hover:text-[#4F8065]"
-              }`}
-              title={
-                walkingExcursionsCollapsed
-                  ? "Show walking excursions"
-                  : "Collapse walking excursions"
-              }
-              aria-label={
-                walkingExcursionsCollapsed
-                  ? "Show walking excursions"
-                  : "Collapse walking excursions"
-              }
-              aria-pressed={walkingExcursionsCollapsed}
-            >
-              <ListCollapse className="size-4" />
-            </button>
-            <button
-              type="button"
               onClick={() => setAiImportOpen(true)}
               className="grid size-[34px] place-items-center rounded-[10px] border border-[#D8CEB8] bg-[#F3EFE4] text-[#8A5F4D] transition-colors hover:border-[#E4562A]/40 hover:bg-[#FBE7DD] hover:text-[#C6532D]"
               title="Import day plan from AI"
@@ -300,7 +297,7 @@ export function DayPanel({
         </div>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-32 pt-3.5">
+      <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-[calc(7.5rem+env(safe-area-inset-bottom))] pt-4 sm:px-4 lg:px-3 lg:pb-32 lg:pt-3.5">
         <div className="flex min-h-full flex-col">
           {previousStay && (
             <PreviousStayBanner
