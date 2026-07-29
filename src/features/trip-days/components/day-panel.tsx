@@ -300,7 +300,7 @@ export function DayPanel({
         </div>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-6 pt-3.5">
+      <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-32 pt-3.5">
         <div className="flex min-h-full flex-col">
           {previousStay && (
             <PreviousStayBanner
@@ -1054,10 +1054,17 @@ function RouteLegSummary({
             />
           )}
         </label>
-      ) : null}
-      {onModeChange && (
-        <span className="size-0.5 rounded-full bg-[#C5BBA5]" aria-hidden />
+      ) : (
+        <span className="inline-flex items-center gap-1 text-[10.5px] font-bold text-[#8C8373]">
+          {isWalking ? (
+            <Footprints className="size-3 text-[#6E8B78]" />
+          ) : (
+            <Navigation className="size-3 text-[#8A8270]" />
+          )}
+          {isWalking ? "Walk" : "Drive"}
+        </span>
       )}
+      <span className="size-0.5 rounded-full bg-[#C5BBA5]" aria-hidden />
       <span className="font-mono text-[10.5px] font-medium text-[#9D9483]">
         {leg && leg.durationMin > 0 && leg.distanceKm > 0
           ? `${formatDuration(leg.durationMin)} · ${formatDistance(leg.distanceKm)}`

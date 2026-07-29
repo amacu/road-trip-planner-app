@@ -157,45 +157,54 @@ export function PreviousStayBanner({
   departureTime?: string | null;
   onSetDepartureTime?: (departureTime: string) => void;
 }) {
+  const stayOption = STAY_OPTIONS.find(([value]) => value === stay.stayType);
+  const StayIcon = stayOption?.[2] ?? BedDouble;
+
   return (
-    <div className="relative flex items-center gap-3 overflow-hidden rounded-[18px] border border-[#CDD3CF] bg-[#EDEFEA] px-3.5 py-3 shadow-[0_5px_16px_rgba(22,19,13,0.04)]">
+    <div className="relative w-full overflow-hidden rounded-[18px] border border-[#CDD3CF] bg-[#EDEFEA] px-3.5 py-3 text-left shadow-[0_5px_16px_rgba(22,19,13,0.04)]">
       <span className="absolute inset-y-3 left-0 w-[3px] rounded-r-full bg-[#5E86A3]" />
-      <span className="grid size-9 shrink-0 place-items-center rounded-full bg-[#526F7D] text-[#F7FAF8]">
-        {stay.stayType === "driving_overnight" ? (
-          <Route className="size-4" />
-        ) : (
-          <Moon className="size-4" />
-        )}
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-[15.5px] font-bold leading-tight text-[#16130D]">
-          {stay.stayType === "driving_overnight"
-            ? "On the road"
-            : `Start from ${stay.name}`}
+      <div className="flex items-center gap-3">
+        <span className="ml-5 grid size-9 shrink-0 place-items-center rounded-full bg-[#526F7D] text-[#F7FAF8] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.14)]">
+          <StayIcon className="size-4" />
         </span>
-        <span className="mt-0.5 block truncate text-[12.5px] text-[#948b76]">
-          {stay.stayType === "driving_overnight"
-            ? "Continuing from the previous day"
-            : stay.address || "Previous overnight stay"}
-        </span>
-      </span>
-      {onSetDepartureTime ? (
-        <span className="flex shrink-0 items-center gap-1.5 text-xs">
-          <span className="text-[#948b76]">Departs</span>
-          <PlainTimeInput
-            value={departureTime ?? ""}
-            onChange={onSetDepartureTime}
-            compact
-            plain
-          />
-        </span>
-      ) : (
-        departureTime && (
-          <span className="shrink-0 font-mono text-xs font-bold">
-            Departs {departureTime}
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 items-center gap-1.5">
+            <span className="rounded-full bg-[#DDE6E6] px-1.5 py-0.5 text-[8px] font-black uppercase tracking-[0.1em] text-[#496775]">
+              Night
+            </span>
+            <span className="truncate text-[10px] font-bold text-[#71858B]">
+              {LABELS[stay.stayType]}
+            </span>
+          </div>
+          <div className="mt-1.5 truncate text-[15px] font-black leading-tight text-[#16130D]">
+            {stay.stayType === "driving_overnight" ? "On the road" : stay.name}
+          </div>
+          <div className="mt-1 truncate text-[11.5px] font-medium text-[#7C8581]">
+            {stay.stayType === "driving_overnight"
+              ? "Continuing from the previous day"
+              : stay.address || LABELS[stay.stayType]}
+          </div>
+        </div>
+        {onSetDepartureTime ? (
+          <span className="flex shrink-0 flex-col items-end gap-1 text-xs">
+            <span className="text-[10px] font-bold text-[#71858B]">
+              Departs
+            </span>
+            <PlainTimeInput
+              value={departureTime ?? ""}
+              onChange={onSetDepartureTime}
+              compact
+              plain
+            />
           </span>
-        )
-      )}
+        ) : (
+          departureTime && (
+            <span className="shrink-0 font-mono text-[11px] font-bold text-[#526F7D]">
+              Departs {departureTime}
+            </span>
+          )
+        )}
+      </div>
     </div>
   );
 }
