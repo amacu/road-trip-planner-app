@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { startTransition, useEffect, useMemo, useRef, useState } from "react";
 
 import type { DayRouteMetric } from "@/features/fuel/lib/fuel-plan";
 import type { TripDayPlain } from "@/features/trips/lib/trip-view-model";
@@ -35,13 +35,15 @@ export function useRouteMetrics(days: TripDayPlain[]) {
       days.map((day) => [day.id, routeSignature(day.stops)]),
     );
 
-    setCache((current) =>
-      Object.fromEntries(
-        Object.entries(current).filter(
-          ([dayId, metric]) => signatures.get(dayId) === metric.signature,
+    startTransition(() => {
+      setCache((current) =>
+        Object.fromEntries(
+          Object.entries(current).filter(
+            ([dayId, metric]) => signatures.get(dayId) === metric.signature,
+          ),
         ),
-      ),
-    );
+      );
+    });
 
     for (const day of days) {
       if (day.stops.length < 2) continue;
@@ -88,28 +90,31 @@ export function useRouteMetrics(days: TripDayPlain[]) {
           const legs = Array.from({ length: day.stops.length - 1 }, () => ({
             distanceKm: 0,
             durationMin: 0,
+            returnDurationMin: 0,
           }));
           validRoutes.forEach((route, index) => {
-            if (
-              index === segments.length - 1 &&
-              segments[index].isReturnToCar
-            ) {
+            const segment = segments[index];
+            const leg = legs[segment.logicalLegIndex];
+            if (segment.isReturnToCar) {
+              leg.returnDurationMin =
+                (leg.returnDurationMin ?? 0) + route.durationMin;
               return;
             }
-            const leg = legs[segments[index].logicalLegIndex];
             leg.distanceKm += route.distanceKm;
             leg.durationMin += route.durationMin;
           });
-          setCache((current) => ({
-            ...current,
-            [day.id]: {
-              signature,
-              distanceKm,
-              driveMin,
-              path,
-              legs,
-            },
-          }));
+          startTransition(() => {
+            setCache((current) => ({
+              ...current,
+              [day.id]: {
+                signature,
+                distanceKm,
+                driveMin,
+                path,
+                legs,
+              },
+            }));
+          });
         })
         .catch((error: unknown) => {
           if (!(error instanceof DOMException && error.name === "AbortError")) {
@@ -154,17 +159,21 @@ export function useRouteMetrics(days: TripDayPlain[]) {
             legs: (() => {
               const legs = Array.from(
                 { length: Math.max(0, day.stops.length - 1) },
-                () => ({ distanceKm: 0, durationMin: 0 }),
+                () => ({
+                  distanceKm: 0,
+                  durationMin: 0,
+                  returnDurationMin: 0,
+                }),
               );
               fallbackRoutes.forEach((route, index) => {
                 if (!route) return;
-                if (
-                  index === segments.length - 1 &&
-                  segments[index].isReturnToCar
-                ) {
+                const segment = segments[index];
+                const leg = legs[segment.logicalLegIndex];
+                if (segment.isReturnToCar) {
+                  leg.returnDurationMin =
+                    (leg.returnDurationMin ?? 0) + route.durationMin;
                   return;
                 }
-                const leg = legs[segments[index].logicalLegIndex];
                 leg.distanceKm += route.distanceKm;
                 leg.durationMin += route.durationMin;
               });

@@ -926,6 +926,14 @@ export function PlannerView({
     setRightPanelMode("notes");
   }
 
+  function selectStopForActivePanel(stopId: string) {
+    if (rightPanelMode === "notes") {
+      openNotesForStop(stopId);
+      return;
+    }
+    setSelectedStopId(stopId);
+  }
+
   const removeDay = useCallback(
     (dayId: string) => {
       if (isImportingTrip) return;
@@ -1922,7 +1930,7 @@ export function PlannerView({
                     }
                     onLaunchNav={() => openInGoogleMaps(currentRouteStops)}
                     onOpenStopNotes={openNotesForStop}
-                    onSelectStop={setSelectedStopId}
+                    onSelectStop={selectStopForActivePanel}
                     stay={currentStay}
                     previousStay={previousStay}
                     showStay={

@@ -16,7 +16,11 @@ export type DayRouteMetric = {
   distanceKm: number;
   driveMin: number;
   path: Array<[number, number]>;
-  legs: Array<{ distanceKm: number; durationMin: number }>;
+  legs: Array<{
+    distanceKm: number;
+    durationMin: number;
+    returnDurationMin?: number;
+  }>;
 };
 
 export type FuelRouteSegment = {

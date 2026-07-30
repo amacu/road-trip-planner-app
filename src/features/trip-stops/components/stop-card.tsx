@@ -104,13 +104,15 @@ export function StopCard({
         : isFirst
           ? "#16130D"
           : "#E4562A";
-  const hasVisitDuration = (stop.visitDurationMin ?? 0) > 0;
+  const hasDepartureRange = Boolean(
+    arrivalTime && departureTime && arrivalTime !== departureTime,
+  );
   const scheduleLabel = !showSchedule
     ? null
     : isTripStart
       ? null
       : !isActivity && arrivalTime
-        ? hasVisitDuration && departureTime
+        ? hasDepartureRange && departureTime
           ? `${arrivalTime} – ${departureTime}`
           : `Arrives ${arrivalTime}`
         : isFirst
@@ -119,12 +121,24 @@ export function StopCard({
             : "Set start time"
           : isLast
             ? arrivalTime
-              ? `Arrives ${arrivalTime}`
+              ? hasDepartureRange && departureTime
+                ? `${arrivalTime} – ${departureTime}`
+                : `Arrives ${arrivalTime}`
               : "Set start time"
             : arrivalTime
               ? `${arrivalTime}${departureTime ? ` – ${departureTime}` : ""}`
               : "Set start time";
   const scheduleIsSet = Boolean(arrivalTime);
+  const locationIconClassName = cn(
+    "grid size-10 shrink-0 place-items-center rounded-[10px] transition-colors",
+    isTripStart
+      ? "bg-[#D9ECDF] text-[#2E7A57] hover:bg-[#CBE4D3]"
+      : isTripFinish
+        ? "bg-[#F0DFC2] text-[#8A5524] hover:bg-[#E9D2AA]"
+        : isActivity
+          ? "bg-[#E7DFF3] text-[#7657B4] hover:bg-[#DCD0ED]"
+          : "bg-[#F8E4DA] text-[#C44C28] hover:bg-[#F3D4C5]",
+  );
 
   return (
     <li
@@ -230,9 +244,16 @@ export function StopCard({
                 <ChevronDown className="size-3" />
               </button>
             </div>
-            <div
-              className="grid size-9 place-items-center rounded-[12px] font-mono text-[12px] font-black text-white"
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                onSelect?.();
+              }}
+              className="grid size-9 place-items-center rounded-[12px] font-mono text-[12px] font-black text-white transition-transform hover:scale-[1.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80"
               style={{ background: markerColor }}
+              title={`Show ${stop.name}`}
+              aria-label={`Show ${stop.name}`}
             >
               {isTripFinish ? (
                 <CircleCheckBig className="size-4" />
@@ -241,7 +262,7 @@ export function StopCard({
               ) : (
                 index + 1
               )}
-            </div>
+            </button>
           </div>
 
           <div className="flex min-w-0 flex-1 items-center justify-between gap-2">
@@ -382,20 +403,22 @@ export function StopCard({
           <div className="mt-3">
             <div className="rounded-[13px] border border-[#DED3C0]/75 bg-white/20 p-2.5">
               <div className="flex items-start gap-2.5">
-                <span
-                  className={cn(
-                    "grid size-10 shrink-0 place-items-center rounded-[10px]",
-                    isTripStart
-                      ? "bg-[#D9ECDF] text-[#2E7A57]"
-                      : isTripFinish
-                        ? "bg-[#F0DFC2] text-[#8A5524]"
-                        : isActivity
-                          ? "bg-[#E7DFF3] text-[#7657B4]"
-                          : "bg-[#F8E4DA] text-[#C44C28]",
-                  )}
-                >
-                  <MapPin className="size-4" />
-                </span>
+                {stop.hasLocation ? (
+                  <a
+                    href={`https://www.google.com/maps/search/?api=1&query=${stop.lat},${stop.lng}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className={locationIconClassName}
+                    title="Open in Google Maps"
+                    aria-label={`Open ${stop.name} in Google Maps`}
+                  >
+                    <MapPin className="size-4" />
+                  </a>
+                ) : (
+                  <span className={locationIconClassName}>
+                    <MapPin className="size-4" />
+                  </span>
+                )}
                 <div className="flex min-h-10 min-w-0 flex-1 flex-col justify-center">
                   {stop.hasLocation ? (
                     <>

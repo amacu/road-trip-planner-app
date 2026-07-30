@@ -95,9 +95,21 @@ export function DayPanel({
   isLastDay?: boolean;
   dateLabel: string | null;
   stops: StopPoint[];
-  legs: Array<{ distanceKm: number; durationMin: number }>;
-  startLeg?: { distanceKm: number; durationMin: number };
-  endLeg?: { distanceKm: number; durationMin: number };
+  legs: Array<{
+    distanceKm: number;
+    durationMin: number;
+    returnDurationMin?: number;
+  }>;
+  startLeg?: {
+    distanceKm: number;
+    durationMin: number;
+    returnDurationMin?: number;
+  };
+  endLeg?: {
+    distanceKm: number;
+    durationMin: number;
+    returnDurationMin?: number;
+  };
   onAddStop: (result: GeocodeResult, itemType: "stop" | "activity") => void;
   onAddManualActivity: (name: string, visitDurationMin: number) => void;
   onImportStops: (
@@ -143,16 +155,29 @@ export function DayPanel({
     index === 0 && stops.length > 0
       ? [{ ...stops[0], visitDurationMin: null }, ...stops.slice(1)]
       : stops;
+  const scheduleLegs = legs.map((leg, legIndex) => ({
+    ...leg,
+    durationMin:
+      leg.durationMin +
+      (legIndex === legs.length - 1 &&
+      stops.at(-1)?.travelMode === "walking" &&
+      !endLeg
+        ? 0
+        : (leg.returnDurationMin ?? 0)),
+  }));
   const schedule = computeStopSchedule(
     day.startTime,
     scheduleStops,
-    legs,
+    scheduleLegs,
     startLeg?.durationMin,
   );
   const lastDepartureTime = schedule[schedule.length - 1]?.departureTime;
   const stayArrivalTime =
     lastDepartureTime && endLeg
-      ? addMinutesToTime(lastDepartureTime, endLeg.durationMin)
+      ? addMinutesToTime(
+          lastDepartureTime,
+          endLeg.durationMin + (endLeg.returnDurationMin ?? 0),
+        )
       : null;
 
   function moveStop(index: number, direction: -1 | 1) {
@@ -179,6 +204,27 @@ export function DayPanel({
       count += 1;
     }
     return count;
+  }
+
+  function departureAfterWalkingExcursion(stopIndex: number) {
+    const excursionCount = walkingExcursionCountAfter(stopIndex);
+    if (excursionCount === 0) {
+      return schedule[stopIndex]?.departureTime ?? null;
+    }
+
+    const lastExcursionIndex = stopIndex + excursionCount;
+    const excursionDeparture =
+      schedule[lastExcursionIndex]?.departureTime ?? null;
+    if (!excursionDeparture) return null;
+
+    const returnDurationMin =
+      lastExcursionIndex < stops.length - 1
+        ? (legs[lastExcursionIndex]?.returnDurationMin ?? 0)
+        : (endLeg?.returnDurationMin ??
+          legs[lastExcursionIndex - 1]?.returnDurationMin ??
+          0);
+
+    return addMinutesToTime(excursionDeparture, returnDurationMin);
   }
 
   function walkingExcursionAnchorId(stopIndex: number) {
@@ -403,7 +449,11 @@ export function DayPanel({
                     isTripStart={index === 0 && i === 0}
                     isTripFinish={isLastDay && i === stops.length - 1}
                     arrivalTime={schedule[i]?.arrivalTime ?? null}
-                    departureTime={schedule[i]?.departureTime ?? null}
+                    departureTime={
+                      stop.travelMode !== "walking"
+                        ? departureAfterWalkingExcursion(i)
+                        : (schedule[i]?.departureTime ?? null)
+                    }
                     dayStartTime={day.startTime ?? ""}
                     onSetDayStartTime={onSetDayStartTime}
                     onUpdate={(patch) => onUpdateStop(stop.id, patch)}
