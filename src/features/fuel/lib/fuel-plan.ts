@@ -20,6 +20,7 @@ export type DayRouteMetric = {
     distanceKm: number;
     durationMin: number;
     returnDurationMin?: number;
+    estimated?: boolean;
   }>;
 };
 

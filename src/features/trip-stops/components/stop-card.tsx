@@ -57,6 +57,8 @@ export function StopCard({
   onMoveDown,
   onOpenNotes,
   onSelect,
+  isExpanded,
+  onExpandedChange,
 }: {
   index: number;
   stop: StopPoint;
@@ -86,12 +88,17 @@ export function StopCard({
   onOpenNotes?: () => void;
   /** Called when this stop is expanded (selected) — lets the map recenter on it and show its activities. */
   onSelect?: () => void;
+  isExpanded?: boolean;
+  onExpandedChange?: (expanded: boolean) => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
+  const [internalExpanded, setInternalExpanded] = useState(false);
   const [editingLocation, setEditingLocation] = useState(false);
+  const expanded = isExpanded ?? internalExpanded;
 
   function toggleExpanded() {
-    setExpanded((current) => !current);
+    const next = !expanded;
+    if (isExpanded === undefined) setInternalExpanded(next);
+    onExpandedChange?.(next);
   }
 
   const isActivity = stop.itemType === "activity";

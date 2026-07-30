@@ -57,6 +57,7 @@ export default async function TripPlannerPage({
 
   return (
     <PlannerView
+      key={trip.id}
       trip={{
         ...plainTrip,
         ownerProfile: ownerProfile ? toUserProfilePlain(ownerProfile) : null,

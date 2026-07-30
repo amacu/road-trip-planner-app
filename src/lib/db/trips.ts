@@ -316,8 +316,8 @@ export async function duplicateTrip(tripId: string, userId: string) {
       return copy;
     },
     {
-      maxWait: 10_000,
-      timeout: 60_000,
+      maxWait: 20_000,
+      timeout: 120_000,
     },
   );
 }

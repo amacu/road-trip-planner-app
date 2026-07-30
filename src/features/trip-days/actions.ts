@@ -11,9 +11,15 @@ import {
   updateTripDay,
 } from "@/lib/db/trip-days";
 import {
+  toTripDayPlain,
   toTripDaySummaryPlain,
+  toTripStayPlain,
+  type TripDayPlain,
   type TripDaySummaryPlain,
+  type TripStayPlain,
 } from "@/features/trips/lib/trip-view-model";
+import { tripAccessWhere } from "@/lib/db/trip-access";
+import { prisma } from "@/lib/prisma";
 import {
   reorderTripDaysSchema,
   tripDayCreateSchema,
@@ -113,4 +119,53 @@ export async function reorderTripDaysAction(
 
   revalidatePath(`/trips/${tripId}`);
   return { success: true, data: undefined };
+}
+
+export async function getTripDaySnapshotAction(
+  tripId: string,
+  dayId: string,
+): Promise<
+  ActionResult<{
+    day: TripDayPlain;
+    stays: TripStayPlain[];
+    stayDayIds: string[];
+  }>
+> {
+  const user = await requireAuthenticatedUser();
+  const day = await prisma.tripDay.findFirst({
+    where: {
+      id: dayId,
+      tripId,
+      trip: tripAccessWhere(user.id),
+    },
+    include: {
+      stops: {
+        orderBy: { stopOrder: "asc" },
+        include: {
+          activities: { orderBy: { activityOrder: "asc" } },
+        },
+      },
+    },
+  });
+  if (!day) return { success: false, error: "Day not found." };
+
+  const previousDay = await prisma.tripDay.findFirst({
+    where: { tripId, dayNumber: day.dayNumber - 1 },
+    select: { id: true },
+  });
+  const stayDayIds = [day.id, previousDay?.id].filter((id): id is string =>
+    Boolean(id),
+  );
+  const stays = await prisma.tripStay.findMany({
+    where: { tripId, afterDayId: { in: stayDayIds } },
+  });
+
+  return {
+    success: true,
+    data: {
+      day: toTripDayPlain(day),
+      stays: stays.map(toTripStayPlain),
+      stayDayIds,
+    },
+  };
 }

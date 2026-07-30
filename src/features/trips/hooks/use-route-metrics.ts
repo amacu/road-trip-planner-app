@@ -21,6 +21,7 @@ function stationaryRoute(stop: { lat: number; lng: number }) {
     distanceKm: 0,
     durationMin: 0,
     legs: [],
+    estimated: false,
   };
 }
 
@@ -91,6 +92,7 @@ export function useRouteMetrics(days: TripDayPlain[]) {
             distanceKm: 0,
             durationMin: 0,
             returnDurationMin: 0,
+            estimated: false,
           }));
           validRoutes.forEach((route, index) => {
             const segment = segments[index];
@@ -100,6 +102,7 @@ export function useRouteMetrics(days: TripDayPlain[]) {
                 (leg.returnDurationMin ?? 0) + route.durationMin;
               return;
             }
+            leg.estimated ||= route.estimated === true;
             leg.distanceKm += route.distanceKm;
             leg.durationMin += route.durationMin;
           });
@@ -163,6 +166,7 @@ export function useRouteMetrics(days: TripDayPlain[]) {
                   distanceKm: 0,
                   durationMin: 0,
                   returnDurationMin: 0,
+                  estimated: true,
                 }),
               );
               fallbackRoutes.forEach((route, index) => {
@@ -174,6 +178,7 @@ export function useRouteMetrics(days: TripDayPlain[]) {
                     (leg.returnDurationMin ?? 0) + route.durationMin;
                   return;
                 }
+                leg.estimated = true;
                 leg.distanceKm += route.distanceKm;
                 leg.durationMin += route.durationMin;
               });

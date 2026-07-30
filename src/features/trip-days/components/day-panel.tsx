@@ -99,16 +99,19 @@ export function DayPanel({
     distanceKm: number;
     durationMin: number;
     returnDurationMin?: number;
+    estimated?: boolean;
   }>;
   startLeg?: {
     distanceKm: number;
     durationMin: number;
     returnDurationMin?: number;
+    estimated?: boolean;
   };
   endLeg?: {
     distanceKm: number;
     durationMin: number;
     returnDurationMin?: number;
+    estimated?: boolean;
   };
   onAddStop: (result: GeocodeResult, itemType: "stop" | "activity") => void;
   onAddManualActivity: (name: string, visitDurationMin: number) => void;
@@ -144,7 +147,79 @@ export function DayPanel({
     useState(false);
   const [expandedWalkingExcursionIds, setExpandedWalkingExcursionIds] =
     useState<Set<string>>(() => new Set());
+  const [expandedStopIds, setExpandedStopIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [hydratedUiDayId, setHydratedUiDayId] = useState<string | null>(null);
   const addItemRef = useRef<HTMLLIElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const scrollSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const storageKey = `trip-day-ui:${day.id}`;
+    let saved: { scrollTop?: number; expandedStopIds?: string[] } = {};
+    try {
+      saved = JSON.parse(
+        localStorage.getItem(storageKey) ?? "{}",
+      ) as typeof saved;
+    } catch {
+      localStorage.removeItem(storageKey);
+    }
+
+    setExpandedStopIds(new Set(saved.expandedStopIds ?? []));
+    setHydratedUiDayId(day.id);
+    requestAnimationFrame(() => {
+      if (scrollContainerRef.current) {
+        scrollContainerRef.current.scrollTop = saved.scrollTop ?? 0;
+      }
+    });
+
+    return () => {
+      if (scrollSaveTimerRef.current) clearTimeout(scrollSaveTimerRef.current);
+    };
+  }, [day.id]);
+
+  useEffect(() => {
+    if (hydratedUiDayId !== day.id) return;
+    const storageKey = `trip-day-ui:${day.id}`;
+    let saved: { scrollTop?: number; expandedStopIds?: string[] } = {};
+    try {
+      saved = JSON.parse(
+        localStorage.getItem(storageKey) ?? "{}",
+      ) as typeof saved;
+    } catch {
+      // A malformed old value can be replaced safely.
+    }
+    localStorage.setItem(
+      storageKey,
+      JSON.stringify({
+        ...saved,
+        expandedStopIds: [...expandedStopIds],
+      }),
+    );
+  }, [day.id, expandedStopIds, hydratedUiDayId]);
+
+  function persistScrollPosition() {
+    if (scrollSaveTimerRef.current) clearTimeout(scrollSaveTimerRef.current);
+    scrollSaveTimerRef.current = setTimeout(() => {
+      const storageKey = `trip-day-ui:${day.id}`;
+      let saved: { scrollTop?: number; expandedStopIds?: string[] } = {};
+      try {
+        saved = JSON.parse(
+          localStorage.getItem(storageKey) ?? "{}",
+        ) as typeof saved;
+      } catch {
+        // A malformed old value can be replaced safely.
+      }
+      localStorage.setItem(
+        storageKey,
+        JSON.stringify({
+          ...saved,
+          scrollTop: scrollContainerRef.current?.scrollTop ?? 0,
+        }),
+      );
+    }, 120);
+  }
 
   useEffect(() => {
     if (!addingType) return;
@@ -389,7 +464,11 @@ export function DayPanel({
         </div>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-[calc(7.5rem+env(safe-area-inset-bottom))] pt-4 sm:px-4 lg:px-3 lg:pb-32 lg:pt-3.5">
+      <div
+        ref={scrollContainerRef}
+        onScroll={persistScrollPosition}
+        className="min-h-0 flex-1 overflow-y-auto px-3 pb-[calc(7.5rem+env(safe-area-inset-bottom))] pt-4 sm:px-4 lg:px-3 lg:pb-32 lg:pt-3.5"
+      >
         <div className="flex min-h-full flex-col">
           {previousStay && (
             <PreviousStayBanner
@@ -425,6 +504,15 @@ export function DayPanel({
                   <StopCard
                     index={i}
                     stop={stop}
+                    isExpanded={expandedStopIds.has(stop.id)}
+                    onExpandedChange={(expanded) =>
+                      setExpandedStopIds((current) => {
+                        const next = new Set(current);
+                        if (expanded) next.add(stop.id);
+                        else next.delete(stop.id);
+                        return next;
+                      })
+                    }
                     hiddenWalkingExcursionCount={
                       walkingExcursionsCollapsed &&
                       stop.travelMode !== "walking" &&
@@ -1128,7 +1216,11 @@ function RouteLegSummary({
   onModeChange,
   onCollapseExcursion,
 }: {
-  leg?: { distanceKm: number; durationMin: number };
+  leg?: {
+    distanceKm: number;
+    durationMin: number;
+    estimated?: boolean;
+  };
   mode?: "driving" | "walking";
   showDriveBranch?: boolean;
   onModeChange?: (mode: "driving" | "walking") => void;
@@ -1192,7 +1284,7 @@ function RouteLegSummary({
       <span className="size-0.5 rounded-full bg-[#C5BBA5]" aria-hidden />
       <span className="font-mono text-[10.5px] font-medium text-[#9D9483]">
         {leg && leg.durationMin > 0 && leg.distanceKm > 0
-          ? `${formatDuration(leg.durationMin)} · ${formatDistance(leg.distanceKm)}`
+          ? `${leg.estimated ? "Estimated · " : ""}${formatDuration(leg.durationMin)} · ${formatDistance(leg.distanceKm)}`
           : "Calculating route..."}
       </span>
       {onCollapseExcursion && (

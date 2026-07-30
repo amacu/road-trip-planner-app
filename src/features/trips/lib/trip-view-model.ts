@@ -232,6 +232,44 @@ export type TripStayPlain = {
   notes: string | null;
 };
 
+export function toTripStayPlain(stay: {
+  id: string;
+  afterDayId: string;
+  name: string;
+  stayType: string;
+  status: string;
+  address: string | null;
+  latitude: { toNumber(): number } | null;
+  longitude: { toNumber(): number } | null;
+  countryCode: string | null;
+  checkInTime: string | null;
+  checkOutTime: string | null;
+  price: { toNumber(): number } | null;
+  currency: string;
+  bookingUrl: string | null;
+  confirmation: string | null;
+  notes: string | null;
+}): TripStayPlain {
+  return {
+    id: stay.id,
+    afterDayId: stay.afterDayId,
+    name: stay.name,
+    stayType: stay.stayType,
+    status: stay.status,
+    address: stay.address ?? "",
+    lat: stay.latitude?.toNumber() ?? null,
+    lng: stay.longitude?.toNumber() ?? null,
+    countryCode: stay.countryCode,
+    checkInTime: stay.checkInTime,
+    checkOutTime: stay.checkOutTime,
+    price: stay.price?.toNumber() ?? null,
+    currency: stay.currency,
+    bookingUrl: stay.bookingUrl,
+    confirmation: stay.confirmation,
+    notes: stay.notes,
+  };
+}
+
 export function toTripPlain(trip: TripWithRelations): TripPlain {
   return {
     id: trip.id,
@@ -247,24 +285,7 @@ export function toTripPlain(trip: TripWithRelations): TripPlain {
     vehicle: trip.vehicle ? toVehiclePlain(trip.vehicle) : null,
     members: trip.members.map(toTripMemberPlain),
     days: trip.days.map(toTripDayPlain),
-    stays: trip.stays.map((stay) => ({
-      id: stay.id,
-      afterDayId: stay.afterDayId,
-      name: stay.name,
-      stayType: stay.stayType,
-      status: stay.status,
-      address: stay.address ?? "",
-      lat: stay.latitude?.toNumber() ?? null,
-      lng: stay.longitude?.toNumber() ?? null,
-      countryCode: stay.countryCode,
-      checkInTime: stay.checkInTime,
-      checkOutTime: stay.checkOutTime,
-      price: stay.price?.toNumber() ?? null,
-      currency: stay.currency,
-      bookingUrl: stay.bookingUrl,
-      confirmation: stay.confirmation,
-      notes: stay.notes,
-    })),
+    stays: trip.stays.map(toTripStayPlain),
     packingItems: trip.packingItems.map((item) => ({
       id: item.id,
       name: item.name,

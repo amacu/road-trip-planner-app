@@ -17,6 +17,7 @@ type RoutingResult = {
   routes: Array<{
     distance: number;
     duration: number;
+    estimated?: boolean;
     geometry: { coordinates: Array<[number, number]> };
     legs: Array<{ distance: number; duration: number }>;
   }>;
@@ -52,6 +53,7 @@ function estimatedRoute(
       {
         distance: legs.reduce((sum, leg) => sum + leg.distance, 0),
         duration: legs.reduce((sum, leg) => sum + leg.duration, 0),
+        estimated: true,
         geometry: {
           coordinates: locations.map(({ lat, lng }) => [lng, lat]),
         },
@@ -184,6 +186,7 @@ async function requestRoute(
         {
           distance: resolvedDistanceKm * 1000,
           duration: resolvedDurationSeconds,
+          estimated: implausibleWalkingRoute,
           geometry: { coordinates: resolvedGeometry },
           legs: implausibleWalkingRoute
             ? [

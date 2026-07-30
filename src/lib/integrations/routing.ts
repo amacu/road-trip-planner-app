@@ -20,12 +20,14 @@ export type DrivingRoute = {
   path: Array<[number, number]>;
   distanceKm: number;
   durationMin: number;
+  estimated?: boolean;
   legs: RouteLeg[];
 };
 
 export type RouteLeg = {
   distanceKm: number;
   durationMin: number;
+  estimated?: boolean;
 };
 
 type OsrmRouteResponse = {
@@ -33,6 +35,7 @@ type OsrmRouteResponse = {
   routes?: Array<{
     distance?: number;
     duration?: number;
+    estimated?: boolean;
     legs?: Array<{
       distance?: number;
       duration?: number;
@@ -259,10 +262,12 @@ async function fetchOsrmRoute(
     path: coordinatesFromRoute.map(([lng, lat]) => [lat, lng]),
     distanceKm: route.distance / 1000,
     durationMin: Math.max(1, Math.round(route.duration / 60)),
+    estimated: route.estimated === true,
     legs:
       route.legs?.map((leg) => ({
         distanceKm: (leg.distance ?? 0) / 1000,
         durationMin: Math.max(1, Math.round((leg.duration ?? 0) / 60)),
+        estimated: route.estimated === true,
       })) ??
       fallbackRouteForStops(stops)?.legs ??
       [],

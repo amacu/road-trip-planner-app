@@ -44,6 +44,7 @@ import {
 import {
   createTripDayAction,
   deleteTripDayAction,
+  getTripDaySnapshotAction,
   reorderTripDaysAction,
   updateTripDayAction,
 } from "@/features/trip-days/actions";
@@ -320,6 +321,8 @@ export function PlannerView({
     trip.days[0]?.id ?? null,
   );
   const realtimeRefreshTimerRef = useRef<number | null>(null);
+  const realtimeNeedsFullRefreshRef = useRef(false);
+  const realtimeSyncInFlightRef = useRef(false);
   // When true, the planner map shows the whole trip (all days' stops)
   // instead of just the active day — toggled by the "Trip summary" tile.
   const [showAllDays, setShowAllDays] = useState(false);
@@ -337,8 +340,102 @@ export function PlannerView({
   const [mobilePlannerPane, setMobilePlannerPane] = useState<
     "itinerary" | "map" | "notes"
   >("itinerary");
+  const [viewStateReady, setViewStateReady] = useState(false);
   const [fuelPrices] = useState<FuelCountryPrice[]>(initialFuelPrices);
   const discardedOptimisticStopIds = useRef(new Set<string>());
+  const initialTripDaysRef = useRef(trip.days);
+
+  useEffect(() => {
+    const storageKey = `trip-planner-view:${trip.id}`;
+    const initialDays = initialTripDaysRef.current;
+
+    try {
+      const raw = window.localStorage.getItem(storageKey);
+      if (raw) {
+        const saved = JSON.parse(raw) as Record<string, unknown>;
+        const savedDayId =
+          typeof saved.activeDayId === "string" &&
+          initialDays.some((day) => day.id === saved.activeDayId)
+            ? saved.activeDayId
+            : initialDays[0]?.id;
+        const savedStopId =
+          typeof saved.selectedStopId === "string" &&
+          initialDays.some((day) =>
+            day.stops.some((stop) => stop.id === saved.selectedStopId),
+          )
+            ? saved.selectedStopId
+            : null;
+        const notesStopId =
+          typeof saved.notesStopId === "string" &&
+          initialDays.some((day) =>
+            day.stops.some((stop) => stop.id === saved.notesStopId),
+          )
+            ? saved.notesStopId
+            : null;
+
+        if (
+          saved.tab === "landing" ||
+          saved.tab === "overview" ||
+          saved.tab === "planner" ||
+          saved.tab === "fuel"
+        ) {
+          setTab(saved.tab);
+        }
+        if (savedDayId) setActiveDayId(savedDayId);
+        if (typeof saved.showAllDays === "boolean") {
+          setShowAllDays(saved.showAllDays);
+        }
+        if (
+          saved.rightPanelMode === "map" ||
+          saved.rightPanelMode === "notes"
+        ) {
+          setRightPanelMode(saved.rightPanelMode);
+        }
+        if (
+          saved.mobilePlannerPane === "itinerary" ||
+          saved.mobilePlannerPane === "map" ||
+          saved.mobilePlannerPane === "notes"
+        ) {
+          setMobilePlannerPane(saved.mobilePlannerPane);
+        }
+        setSelectedStopId(savedStopId);
+        if (saved.rightPanelMode === "notes" && notesStopId) {
+          setNotesFocus({ stopId: notesStopId, request: Date.now() });
+        }
+      }
+    } catch {
+      window.localStorage.removeItem(storageKey);
+    } finally {
+      setViewStateReady(true);
+    }
+  }, [trip.id]);
+
+  useEffect(() => {
+    if (!viewStateReady) return;
+
+    window.localStorage.setItem(
+      `trip-planner-view:${trip.id}`,
+      JSON.stringify({
+        tab,
+        activeDayId,
+        showAllDays,
+        rightPanelMode,
+        mobilePlannerPane,
+        selectedStopId,
+        notesStopId: notesFocus?.stopId ?? null,
+      }),
+    );
+  }, [
+    activeDayId,
+    mobilePlannerPane,
+    notesFocus?.stopId,
+    rightPanelMode,
+    selectedStopId,
+    showAllDays,
+    tab,
+    trip.id,
+    viewStateReady,
+  ]);
 
   const isOwner = trip.ownerId === currentUserId;
   const currentDay = days.find((d) => d.id === activeDayId) ?? days[0];
@@ -353,13 +450,47 @@ export function PlannerView({
     if (!currentRealtimeDayId) return;
 
     const supabase = getSupabaseBrowserClient();
+    let knownDayVersion: string | null = null;
+    let versionCheckInFlight = false;
     const relevantDayIds = new Set(
       [currentRealtimeDayId, previousDayId].filter(
         (dayId): dayId is string => dayId !== null,
       ),
     );
 
-    function scheduleRefresh() {
+    async function syncActiveDay() {
+      if (realtimeSyncInFlightRef.current) return;
+      realtimeSyncInFlightRef.current = true;
+      try {
+        const result = await getTripDaySnapshotAction(
+          trip.id,
+          currentRealtimeDayId,
+        );
+        if (!result.success) {
+          startTransition(() => router.refresh());
+          return;
+        }
+
+        startTransition(() => {
+          setDays((current) =>
+            current.map((day) =>
+              day.id === result.data.day.id ? result.data.day : day,
+            ),
+          );
+          setStays((current) => [
+            ...current.filter(
+              (stay) => !result.data.stayDayIds.includes(stay.afterDayId),
+            ),
+            ...result.data.stays,
+          ]);
+        });
+      } finally {
+        realtimeSyncInFlightRef.current = false;
+      }
+    }
+
+    function scheduleRefresh(fullRefresh = false) {
+      realtimeNeedsFullRefreshRef.current ||= fullRefresh;
       if (realtimeRefreshTimerRef.current) {
         window.clearTimeout(realtimeRefreshTimerRef.current);
       }
@@ -381,7 +512,12 @@ export function PlannerView({
         }
 
         realtimeRefreshTimerRef.current = null;
-        startTransition(() => router.refresh());
+        if (realtimeNeedsFullRefreshRef.current) {
+          realtimeNeedsFullRefreshRef.current = false;
+          startTransition(() => router.refresh());
+        } else {
+          void syncActiveDay();
+        }
       };
 
       realtimeRefreshTimerRef.current = window.setTimeout(refreshWhenIdle, 350);
@@ -396,6 +532,9 @@ export function PlannerView({
       },
     ) {
       const record = payload.eventType === "DELETE" ? payload.old : payload.new;
+      if (table === "trip_days" && typeof record.updated_at === "string") {
+        knownDayVersion = record.updated_at;
+      }
       const changedDayId =
         table === "trip_days"
           ? record.id
@@ -403,12 +542,19 @@ export function PlannerView({
             ? record.after_day_id
             : record.trip_day_id;
 
+      const dayStructureChanged =
+        table === "trip_days" &&
+        (payload.eventType === "INSERT" ||
+          payload.eventType === "DELETE" ||
+          (payload.eventType === "UPDATE" &&
+            record.day_number !== payload.old.day_number));
+
       if (
-        table === "trip_days" ||
+        dayStructureChanged ||
         typeof changedDayId !== "string" ||
         relevantDayIds.has(changedDayId)
       ) {
-        scheduleRefresh();
+        scheduleRefresh(dayStructureChanged);
       }
     }
 
@@ -439,13 +585,46 @@ export function PlannerView({
       );
     });
 
+    let realtimeConnected = false;
     channel.subscribe((status: string) => {
+      realtimeConnected = status === "SUBSCRIBED";
       if (status === "CHANNEL_ERROR") {
         console.warn("Could not subscribe to live trip updates.");
       }
     });
 
+    async function checkDayVersion() {
+      if (
+        realtimeConnected ||
+        versionCheckInFlight ||
+        document.visibilityState !== "visible"
+      ) {
+        return;
+      }
+
+      versionCheckInFlight = true;
+      try {
+        const { data, error } = await supabase
+          .from("trip_days")
+          .select("updated_at")
+          .eq("id", currentRealtimeDayId)
+          .maybeSingle();
+        if (error || !data || typeof data.updated_at !== "string") return;
+
+        if (knownDayVersion && knownDayVersion !== data.updated_at) {
+          scheduleRefresh();
+        }
+        knownDayVersion = data.updated_at;
+      } finally {
+        versionCheckInFlight = false;
+      }
+    }
+
+    void checkDayVersion();
+    const versionCheckTimer = window.setInterval(checkDayVersion, 5_000);
+
     return () => {
+      window.clearInterval(versionCheckTimer);
       if (realtimeRefreshTimerRef.current) {
         window.clearTimeout(realtimeRefreshTimerRef.current);
         realtimeRefreshTimerRef.current = null;
