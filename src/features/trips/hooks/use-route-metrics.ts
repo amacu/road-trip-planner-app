@@ -15,6 +15,15 @@ import {
 
 type CachedRouteMetric = DayRouteMetric & { signature: string };
 
+function stationaryRoute(stop: { lat: number; lng: number }) {
+  return {
+    path: [[stop.lat, stop.lng] as [number, number]],
+    distanceKm: 0,
+    durationMin: 0,
+    legs: [],
+  };
+}
+
 export function useRouteMetrics(days: TripDayPlain[]) {
   const [cache, setCache] = useState<Record<string, CachedRouteMetric>>({});
   const cacheRef = useRef(cache);
@@ -43,6 +52,12 @@ export function useRouteMetrics(days: TripDayPlain[]) {
       Promise.all(
         segments.map((segment) => {
           const pair = [segment.from, segment.to];
+          if (
+            segment.from.lat === segment.to.lat &&
+            segment.from.lng === segment.to.lng
+          ) {
+            return Promise.resolve(stationaryRoute(segment.to));
+          }
           return segment.mode === "walking"
             ? fetchWalkingRoute(pair, controller.signal)
             : fetchDrivingRoute(pair, controller.signal);
@@ -59,11 +74,15 @@ export function useRouteMetrics(days: TripDayPlain[]) {
             index === 0 ? route.path : route.path.slice(1),
           );
           const distanceKm = validRoutes.reduce(
-            (sum, route) => sum + route.distanceKm,
+            (sum, route, index) =>
+              sum +
+              (segments[index]?.mode === "driving" ? route.distanceKm : 0),
             0,
           );
           const driveMin = validRoutes.reduce(
-            (sum, route) => sum + route.durationMin,
+            (sum, route, index) =>
+              sum +
+              (segments[index]?.mode === "driving" ? route.durationMin : 0),
             0,
           );
           const legs = Array.from({ length: day.stops.length - 1 }, () => ({
@@ -114,11 +133,19 @@ export function useRouteMetrics(days: TripDayPlain[]) {
       const fallback = fallbackRoutes.every(Boolean)
         ? {
             distanceKm: fallbackRoutes.reduce(
-              (sum, route) => sum + (route?.distanceKm ?? 0),
+              (sum, route, index) =>
+                sum +
+                (segments[index]?.mode === "driving"
+                  ? (route?.distanceKm ?? 0)
+                  : 0),
               0,
             ),
             durationMin: fallbackRoutes.reduce(
-              (sum, route) => sum + (route?.durationMin ?? 0),
+              (sum, route, index) =>
+                sum +
+                (segments[index]?.mode === "driving"
+                  ? (route?.durationMin ?? 0)
+                  : 0),
               0,
             ),
             path: fallbackRoutes.flatMap((route, index) =>

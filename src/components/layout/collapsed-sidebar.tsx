@@ -82,9 +82,10 @@ export function CollapsedSidebar({
           <div className="my-3 h-px w-8 shrink-0 bg-[#E4DBC8]" />
           <nav className="flex min-h-0 flex-1 flex-col items-center gap-2 overflow-x-hidden overflow-y-auto py-0.5">
             {trips.map((trip) => (
-              <button
+              <Link
                 key={trip.id}
-                type="button"
+                href={`/trips/${trip.id}`}
+                prefetch={false}
                 onClick={() => onSelectTrip?.(trip.id)}
                 title={trip.name}
                 aria-label={trip.name}
@@ -114,7 +115,7 @@ export function CollapsedSidebar({
                       : "ring-transparent group-hover:ring-[#D8CEB8]",
                   )}
                 />
-              </button>
+              </Link>
             ))}
           </nav>
         </>

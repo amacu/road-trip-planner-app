@@ -1,6 +1,6 @@
 "use client";
 
-import { Loader2, Search, X } from "lucide-react";
+import { Clock3, Loader2, Plus, Search, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { geocode } from "@/lib/geocode-client";
@@ -13,17 +13,20 @@ export function AddStopBox({
   placeholder = "Search a place or paste a Google Maps link",
   helpText = "Or click anywhere on the map to drop a pin.",
   embedded = false,
+  onAddWithoutLocation,
 }: {
   onAdd: (result: GeocodeResult) => void;
   onClose?: () => void;
   placeholder?: string;
   helpText?: string;
   embedded?: boolean;
+  onAddWithoutLocation?: (name: string, visitDurationMin: number) => void;
 }) {
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<GeocodeResult[]>([]);
   const [err, setErr] = useState<string | null>(null);
+  const [manualDuration, setManualDuration] = useState("01:00");
 
   useEffect(() => {
     const query = q.trim();
@@ -72,6 +75,19 @@ export function AddStopBox({
     setResults([]);
   }
 
+  function addWithoutLocation() {
+    const name = q.trim();
+    if (!name || !onAddWithoutLocation) return;
+    const [hours, minutes] = manualDuration.split(":").map(Number);
+    const totalMinutes = hours * 60 + minutes;
+    const duration = Number.isFinite(totalMinutes)
+      ? Math.max(1, totalMinutes)
+      : 60;
+    onAddWithoutLocation(name, duration);
+    setQ("");
+    setResults([]);
+  }
+
   return (
     <div
       className={cn(
@@ -113,6 +129,35 @@ export function AddStopBox({
         <p className="mt-2 px-1 text-[10.5px] font-medium text-[#9A917F]">
           {helpText}
         </p>
+      )}
+
+      {onAddWithoutLocation && (
+        <div className="mt-2 flex flex-wrap items-center gap-2 rounded-[12px] border border-[#D8CDE8] bg-[#F3EFF8] p-2">
+          <span className="min-w-0 flex-1 px-1 text-[11px] font-bold text-[#6C4FA8]">
+            {q.trim()
+              ? `Add “${q.trim()}” without a map location`
+              : "Add an activity without a map location"}
+          </span>
+          <label className="flex h-8 items-center gap-1.5 rounded-[9px] bg-white/75 px-2 text-[#776893]">
+            <Clock3 className="size-3.5" />
+            <input
+              type="time"
+              value={manualDuration}
+              onChange={(event) => setManualDuration(event.target.value)}
+              className="w-[68px] bg-transparent font-mono text-[11px] font-bold outline-none"
+              aria-label="Activity duration"
+            />
+          </label>
+          <button
+            type="button"
+            onClick={addWithoutLocation}
+            disabled={!q.trim()}
+            className="inline-flex h-8 items-center gap-1.5 rounded-[9px] bg-[#7C5CBF] px-3 text-[10.5px] font-black text-white transition hover:bg-[#6849A5] disabled:cursor-not-allowed disabled:opacity-35"
+          >
+            <Plus className="size-3.5" />
+            Add
+          </button>
+        </div>
       )}
 
       {err && (

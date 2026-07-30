@@ -25,6 +25,7 @@ export type StopPoint = {
   address: string;
   lat: number;
   lng: number;
+  hasLocation: boolean;
   countryCode: string | null;
   itemType: "stop" | "activity";
   travelMode: "driving" | "walking";
@@ -76,6 +77,7 @@ export function toStopPoint(stop: TripStopRecord): StopPoint {
     address: stop.address ?? "",
     lat: stop.latitude ? stop.latitude.toNumber() : 0,
     lng: stop.longitude ? stop.longitude.toNumber() : 0,
+    hasLocation: stop.latitude !== null && stop.longitude !== null,
     countryCode: stop.countryCode,
     itemType: stop.stopType === "activity" ? "activity" : "stop",
     travelMode: stop.travelMode === "walking" ? "walking" : "driving",

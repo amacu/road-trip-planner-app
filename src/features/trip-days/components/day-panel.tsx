@@ -72,6 +72,7 @@ export function DayPanel({
   startLeg,
   endLeg,
   onAddStop,
+  onAddManualActivity,
   onImportStops,
   onUpdateStop,
   onRemoveStop,
@@ -98,6 +99,7 @@ export function DayPanel({
   startLeg?: { distanceKm: number; durationMin: number };
   endLeg?: { distanceKm: number; durationMin: number };
   onAddStop: (result: GeocodeResult, itemType: "stop" | "activity") => void;
+  onAddManualActivity: (name: string, visitDurationMin: number) => void;
   onImportStops: (
     items: AiDayRouteItem[],
     replaceExisting: boolean,
@@ -349,13 +351,17 @@ export function DayPanel({
           )}
           {startLeg && (
             <ol>
-              <RouteLegSummary
-                leg={startLeg}
-                mode={stops[0]?.travelMode}
-                onModeChange={(travelMode) =>
-                  stops[0] && onUpdateStop(stops[0].id, { travelMode })
-                }
-              />
+              {stops[0]?.hasLocation ? (
+                <RouteLegSummary
+                  leg={startLeg}
+                  mode={stops[0]?.travelMode}
+                  onModeChange={(travelMode) =>
+                    stops[0] && onUpdateStop(stops[0].id, { travelMode })
+                  }
+                />
+              ) : (
+                <EmptyRouteConnector />
+              )}
             </ol>
           )}
           <ol>
@@ -387,9 +393,10 @@ export function DayPanel({
                     isWalkingExcursion={stop.travelMode === "walking"}
                     showDriveSpine={
                       stop.travelMode === "walking" &&
-                      stops
-                        .slice(i + 1)
-                        .some((item) => item.travelMode === "driving")
+                      (!stop.hasLocation ||
+                        stops
+                          .slice(i + 1)
+                          .some((item) => item.travelMode === "driving"))
                     }
                     isFirst={i === 0}
                     isLast={i === stops.length - 1}
@@ -409,27 +416,33 @@ export function DayPanel({
                   />
                 )}
                 {i < stops.length - 1 && !walkingExcursionIsHidden(i + 1) && (
-                  <RouteLegSummary
-                    leg={legs[i]}
-                    mode={stops[i + 1].travelMode}
-                    showDriveBranch={
-                      stops[i + 1].travelMode === "walking" &&
-                      stops
-                        .slice(i + 2)
-                        .some((item) => item.travelMode === "driving")
-                    }
-                    onModeChange={(travelMode) =>
-                      onUpdateStop(stops[i + 1].id, { travelMode })
-                    }
-                    onCollapseExcursion={
-                      stop.travelMode !== "walking" &&
-                      stops[i + 1].travelMode === "walking" &&
-                      (!walkingExcursionsCollapsed ||
-                        expandedWalkingExcursionIds.has(stop.id))
-                        ? () => collapseWalkingExcursion(stop.id)
-                        : undefined
-                    }
-                  />
+                  <>
+                    {stops[i + 1].hasLocation ? (
+                      <RouteLegSummary
+                        leg={legs[i]}
+                        mode={stops[i + 1].travelMode}
+                        showDriveBranch={
+                          stops[i + 1].travelMode === "walking" &&
+                          stops
+                            .slice(i + 2)
+                            .some((item) => item.travelMode === "driving")
+                        }
+                        onModeChange={(travelMode) =>
+                          onUpdateStop(stops[i + 1].id, { travelMode })
+                        }
+                        onCollapseExcursion={
+                          stop.travelMode !== "walking" &&
+                          stops[i + 1].travelMode === "walking" &&
+                          (!walkingExcursionsCollapsed ||
+                            expandedWalkingExcursionIds.has(stop.id))
+                            ? () => collapseWalkingExcursion(stop.id)
+                            : undefined
+                        }
+                      />
+                    ) : (
+                      <EmptyRouteConnector />
+                    )}
+                  </>
                 )}
               </Fragment>
             ))}
@@ -476,9 +489,21 @@ export function DayPanel({
                       onAddStop(result, addingType);
                       setAddingType(null);
                     }}
+                    onAddWithoutLocation={
+                      addingType === "activity"
+                        ? (name, visitDurationMin) => {
+                            onAddManualActivity(name, visitDurationMin);
+                            setAddingType(null);
+                          }
+                        : undefined
+                    }
                     onClose={() => setAddingType(null)}
                     placeholder={`Search a place for this ${addingType}`}
-                    helpText="Search by name or address, or paste a Google Maps link."
+                    helpText={
+                      addingType === "activity"
+                        ? "Choose a place, or add a schedule-only activity without a location."
+                        : "Search by name or address, or paste a Google Maps link."
+                    }
                   />
                 </div>
               </li>
@@ -1029,6 +1054,14 @@ function parseAiPlan(raw: string): AiDayImportPlan {
   });
 
   return { dayStartTime, dayNotesMarkdown, items: parsedItems };
+}
+
+function EmptyRouteConnector() {
+  return (
+    <li aria-hidden className="relative h-5">
+      <span className="absolute inset-y-0 left-[18px] border-l border-dashed border-[#D1C7B2]" />
+    </li>
+  );
 }
 
 function RouteLegSummary({

@@ -57,6 +57,7 @@ function stayAsMapStop(stay: TripStayPlain): StopPoint {
     address: stay.address,
     lat: stay.lat ?? 0,
     lng: stay.lng ?? 0,
+    hasLocation: stay.lat != null && stay.lng != null,
     countryCode: stay.countryCode,
     itemType: "stop",
     travelMode: "driving",

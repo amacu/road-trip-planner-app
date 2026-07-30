@@ -71,15 +71,18 @@ export function StayCard({
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="group relative w-full overflow-hidden rounded-[18px] border border-[#CDD3CF] bg-[#EDEFEA] px-3.5 py-3 text-left shadow-[0_5px_16px_rgba(22,19,13,0.04)] transition-all duration-200 hover:-translate-y-px hover:border-[#9FADAE] hover:bg-[#E8ECE7] hover:shadow-[0_10px_24px_rgba(48,69,77,0.1)]"
+          className="group relative w-full overflow-hidden rounded-[18px] border border-[#CDD3CF] bg-[#EDEFEA] px-3.5 py-2 text-left shadow-[0_5px_16px_rgba(22,19,13,0.04)] transition-all duration-200 hover:-translate-y-px hover:border-[#9FADAE] hover:bg-[#E8ECE7] hover:shadow-[0_10px_24px_rgba(48,69,77,0.1)]"
         >
           <span className="absolute inset-y-3 left-0 w-[3px] rounded-r-full bg-[#5E86A3]" />
           <div className="flex items-center gap-3">
-            <span className="ml-5 grid size-9 shrink-0 place-items-center rounded-full bg-[#526F7D] text-[#F7FAF8] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.14)]">
+            <span className="ml-5 grid size-9 shrink-0 place-items-center rounded-[12px] bg-[#526F7D] text-[#F7FAF8]">
               <StayIcon className="size-4" />
             </span>
-            <div className="min-w-0 flex-1">
-              <div className="flex min-w-0 items-center gap-1.5">
+            <div className="flex min-h-9 min-w-0 flex-1 flex-col justify-center">
+              <div className="truncate text-[15px] font-black leading-tight text-[#16130D]">
+                {stay.name}
+              </div>
+              <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
                 <span className="rounded-full bg-[#DDE6E6] px-1.5 py-0.5 text-[8px] font-black uppercase tracking-[0.1em] text-[#496775]">
                   Night
                 </span>
@@ -88,28 +91,13 @@ export function StayCard({
                   {arrivalTime && stay.stayType !== "driving_overnight"
                     ? ` · Arrives ${arrivalTime}`
                     : ""}
+                  {stay.price != null
+                    ? ` · ${stay.price} ${stay.currency}`
+                    : ""}
                 </span>
               </div>
-              <div className="mt-1.5 truncate text-[15px] font-black leading-tight text-[#16130D]">
-                {stay.name}
-              </div>
-              <div className="mt-1 truncate text-[11.5px] font-medium text-[#7C8581]">
-                {stay.stayType === "driving_overnight"
-                  ? "Continue to the next day without stopping"
-                  : stay.address || LABELS[stay.stayType]}
-              </div>
-              {stay.checkOutTime && stay.stayType !== "driving_overnight" && (
-                <div className="mt-2 font-mono text-[10.5px] font-bold text-[#71858B]">
-                  Check-out {stay.checkOutTime}
-                </div>
-              )}
             </div>
-            <div className="flex shrink-0 flex-col items-end gap-1">
-              {stay.price != null && (
-                <span className="font-mono text-[11px] font-bold text-[#526F7D]">
-                  {stay.price} {stay.currency}
-                </span>
-              )}
+            <div className="flex shrink-0 items-center">
               <span className="grid size-7 place-items-center rounded-[8px] text-[#71858B] opacity-100 transition-all group-hover:bg-[#DEE6E4] md:opacity-0 md:group-hover:opacity-100">
                 <Pencil className="size-3.5" />
               </span>
@@ -120,17 +108,17 @@ export function StayCard({
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="group relative flex w-full items-center gap-3 overflow-hidden rounded-[18px] border border-dashed border-[#B7C4C2] bg-[#EDEFEA] px-3.5 py-3 text-left shadow-[0_5px_16px_rgba(22,19,13,0.03)] transition-all hover:border-[#819A9E] hover:bg-[#E8ECE7]"
+          className="group relative flex w-full items-center gap-3 overflow-hidden rounded-[18px] border border-dashed border-[#B7C4C2] bg-[#EDEFEA] px-3.5 py-2 text-left shadow-[0_5px_16px_rgba(22,19,13,0.03)] transition-all hover:border-[#819A9E] hover:bg-[#E8ECE7]"
         >
           <span className="absolute inset-y-3 left-0 w-[3px] rounded-r-full bg-[#7C98A5]" />
-          <span className="ml-5 grid size-9 shrink-0 place-items-center rounded-full bg-[#526F7D] text-[#F7FAF8]">
+          <span className="ml-5 grid size-9 shrink-0 place-items-center rounded-[12px] bg-[#526F7D] text-[#F7FAF8]">
             <Moon className="size-4" />
           </span>
-          <span className="min-w-0 flex-1">
+          <span className="flex min-h-9 min-w-0 flex-1 flex-col justify-center">
             <span className="block text-[15px] font-black leading-tight text-[#263F4C]">
               Plan the night
             </span>
-            <span className="mt-1 block text-[11.5px] font-medium text-[#71858B]">
+            <span className="mt-0.5 block text-[10px] font-bold text-[#71858B]">
               Hotel, tent, car or drive overnight
             </span>
           </span>
@@ -167,49 +155,42 @@ export function PreviousStayBanner({
   const StayIcon = stayOption?.[2] ?? BedDouble;
 
   return (
-    <div className="relative w-full overflow-hidden rounded-[18px] border border-[#CDD3CF] bg-[#EDEFEA] px-3.5 py-3 text-left shadow-[0_5px_16px_rgba(22,19,13,0.04)]">
+    <div className="relative w-full overflow-hidden rounded-[18px] border border-[#CDD3CF] bg-[#EDEFEA] px-3.5 py-2 text-left shadow-[0_5px_16px_rgba(22,19,13,0.04)]">
       <span className="absolute inset-y-3 left-0 w-[3px] rounded-r-full bg-[#5E86A3]" />
       <div className="flex items-center gap-3">
-        <span className="ml-5 grid size-9 shrink-0 place-items-center rounded-full bg-[#526F7D] text-[#F7FAF8] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.14)]">
+        <span className="ml-5 grid size-9 shrink-0 place-items-center rounded-[12px] bg-[#526F7D] text-[#F7FAF8]">
           <StayIcon className="size-4" />
         </span>
-        <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 items-center gap-1.5">
+        <div className="flex min-h-9 min-w-0 flex-1 flex-col justify-center">
+          <div className="truncate text-[15px] font-black leading-tight text-[#16130D]">
+            {stay.stayType === "driving_overnight" ? "On the road" : stay.name}
+          </div>
+          <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
             <span className="rounded-full bg-[#DDE6E6] px-1.5 py-0.5 text-[8px] font-black uppercase tracking-[0.1em] text-[#496775]">
               Night
             </span>
             <span className="truncate text-[10px] font-bold text-[#71858B]">
               {LABELS[stay.stayType]}
             </span>
-          </div>
-          <div className="mt-1.5 truncate text-[15px] font-black leading-tight text-[#16130D]">
-            {stay.stayType === "driving_overnight" ? "On the road" : stay.name}
-          </div>
-          <div className="mt-1 truncate text-[11.5px] font-medium text-[#7C8581]">
-            {stay.stayType === "driving_overnight"
-              ? "Continuing from the previous day"
-              : stay.address || LABELS[stay.stayType]}
+            {(onSetDepartureTime || departureTime) && (
+              <span className="flex min-w-0 items-center gap-1 text-[10px] font-bold text-[#71858B]">
+                <span>· Departs</span>
+                {onSetDepartureTime ? (
+                  <PlainTimeInput
+                    value={departureTime ?? ""}
+                    onChange={onSetDepartureTime}
+                    compact
+                    plain
+                  />
+                ) : (
+                  <span className="font-mono text-[11px] text-[#526F7D]">
+                    {departureTime}
+                  </span>
+                )}
+              </span>
+            )}
           </div>
         </div>
-        {onSetDepartureTime ? (
-          <span className="flex shrink-0 flex-col items-end gap-1 text-xs">
-            <span className="text-[10px] font-bold text-[#71858B]">
-              Departs
-            </span>
-            <PlainTimeInput
-              value={departureTime ?? ""}
-              onChange={onSetDepartureTime}
-              compact
-              plain
-            />
-          </span>
-        ) : (
-          departureTime && (
-            <span className="shrink-0 font-mono text-[11px] font-bold text-[#526F7D]">
-              Departs {departureTime}
-            </span>
-          )
-        )}
       </div>
     </div>
   );

@@ -10,11 +10,13 @@ import {
   Landmark,
   MapPin,
   NotebookPen,
+  Pencil,
   Trash2,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import type { StopPoint } from "@/features/trips/lib/trip-view-model";
+import { AddStopBox } from "@/features/trip-stops/components/add-stop-box";
 import { cn } from "@/lib/utils";
 
 function minutesToHHMM(min: number | null | undefined): string {
@@ -86,6 +88,7 @@ export function StopCard({
   onSelect?: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [editingLocation, setEditingLocation] = useState(false);
 
   function toggleExpanded() {
     setExpanded((current) => !current);
@@ -148,7 +151,8 @@ export function StopCard({
       )}
       <div
         className={cn(
-          "relative z-[1] flex flex-col overflow-hidden rounded-[18px] border px-3.5 py-3 shadow-[0_5px_16px_rgba(22,19,13,0.04)] transition-all duration-200",
+          "relative z-[1] flex flex-col overflow-hidden rounded-[18px] border px-3.5 shadow-[0_5px_16px_rgba(22,19,13,0.04)] transition-all duration-200",
+          !expanded && stop.hasLocation ? "py-2" : "py-3",
           isTripFinish
             ? expanded
               ? "border-[#C99A5B] bg-[#F7EEDC] shadow-[0_10px_24px_rgba(138,85,36,0.12)]"
@@ -187,7 +191,12 @@ export function StopCard({
                 type="button"
                 disabled={isFirst}
                 onClick={onMoveUp}
-                className="grid size-4 place-items-center rounded-[5px] text-[#A89F88] opacity-65 transition-all hover:bg-muted hover:text-foreground hover:opacity-100 disabled:cursor-default disabled:opacity-15"
+                className={cn(
+                  "grid size-4 place-items-center rounded-[5px] text-[#A89F88] opacity-65 transition-all hover:opacity-100 disabled:cursor-default disabled:opacity-15",
+                  isActivity
+                    ? "hover:bg-[#E7DFF3] hover:text-[#6C4FA8]"
+                    : "hover:bg-muted hover:text-foreground",
+                )}
                 title="Move item up"
                 aria-label={`Move ${stop.name} up`}
               >
@@ -209,7 +218,12 @@ export function StopCard({
                 type="button"
                 disabled={isLast}
                 onClick={onMoveDown}
-                className="grid size-4 place-items-center rounded-[5px] text-[#A89F88] opacity-65 transition-all hover:bg-muted hover:text-foreground hover:opacity-100 disabled:cursor-default disabled:opacity-15"
+                className={cn(
+                  "grid size-4 place-items-center rounded-[5px] text-[#A89F88] opacity-65 transition-all hover:opacity-100 disabled:cursor-default disabled:opacity-15",
+                  isActivity
+                    ? "hover:bg-[#E7DFF3] hover:text-[#6C4FA8]"
+                    : "hover:bg-muted hover:text-foreground",
+                )}
                 title="Move item down"
                 aria-label={`Move ${stop.name} down`}
               >
@@ -217,7 +231,7 @@ export function StopCard({
               </button>
             </div>
             <div
-              className="grid size-8 place-items-center rounded-full font-mono text-[12px] font-black text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.16)]"
+              className="grid size-9 place-items-center rounded-[12px] font-mono text-[12px] font-black text-white"
               style={{ background: markerColor }}
             >
               {isTripFinish ? (
@@ -230,7 +244,7 @@ export function StopCard({
             </div>
           </div>
 
-          <div className="flex min-w-0 flex-1 items-start justify-between gap-2">
+          <div className="flex min-w-0 flex-1 items-center justify-between gap-2">
             <div
               role="button"
               tabIndex={0}
@@ -241,70 +255,83 @@ export function StopCard({
                   onSelect?.();
                 }
               }}
-              className="min-w-0 flex-1 text-left"
+              className="flex min-h-9 min-w-0 flex-1 flex-col justify-center text-left"
             >
-              <span className="flex min-w-0 items-center gap-1.5">
+              {expanded ? (
+                <EditableStopName
+                  value={stop.name}
+                  onChange={(name) => onUpdate({ name })}
+                />
+              ) : (
                 <span
-                  className={cn(
-                    "shrink-0 rounded-full px-1.5 py-0.5 text-[8px] font-black uppercase tracking-[0.1em]",
-                    isTripFinish
-                      ? "bg-[#F0DFC2] text-[#80501F]"
-                      : isTripStart
-                        ? "bg-[#D9ECDF] text-[#256647]"
-                        : isActivity
-                          ? "bg-[#F0EAFB] text-[#6C4FA8]"
-                          : "bg-[#FBE7DD] text-[#B8431F]",
-                  )}
+                  className="block cursor-text select-text truncate text-[15px] font-black leading-tight text-[#16130D]"
+                  onClick={(event) => event.stopPropagation()}
                 >
-                  {isTripFinish
-                    ? "Finish"
-                    : isTripStart
-                      ? "Start"
-                      : isActivity
-                        ? "Activity"
-                        : "Stop"}
+                  {stop.name}
                 </span>
-                {scheduleLabel && (
+              )}
+              {isTripStart || isTripFinish ? (
+                <span className="mt-0.5 flex min-w-0 items-center gap-1.5 leading-none">
                   <span
                     className={cn(
-                      "inline-flex min-w-0 items-center gap-1 truncate text-[10px] font-bold",
+                      "shrink-0 rounded-full px-1.5 py-0.5 text-[8px] font-black uppercase tracking-[0.1em]",
+                      isTripFinish
+                        ? "bg-[#F0DFC2] text-[#80501F]"
+                        : "bg-[#D9ECDF] text-[#256647]",
+                    )}
+                  >
+                    {isTripFinish ? "Finish" : "Start"}
+                  </span>
+                  {isTripStart && onSetDayStartTime ? (
+                    <span className="flex min-w-0 items-center gap-1 text-[10px] font-bold text-[#71858B]">
+                      <span>Departs</span>
+                      <PlainTimeInput
+                        value={dayStartTime ?? ""}
+                        onChange={onSetDayStartTime}
+                        compact
+                        plain
+                      />
+                    </span>
+                  ) : (
+                    scheduleLabel && (
+                      <span className="truncate text-[10px] font-bold text-[#7A7264]">
+                        {scheduleLabel}
+                      </span>
+                    )
+                  )}
+                </span>
+              ) : (
+                (scheduleLabel || !stop.hasLocation) && (
+                  <span
+                    className={cn(
+                      "mt-0.5 inline-flex min-w-0 items-center gap-1 truncate text-[10px] font-bold leading-none",
                       scheduleIsSet ? "text-[#6E756B]" : "text-[#A89F88]",
                     )}
                   >
-                    {scheduleIsSet ? (
-                      <span
-                        className={cn(
-                          "size-1.5 shrink-0 rounded-full",
-                          isActivity ? "bg-[#7C5CBF]" : "bg-brand",
-                        )}
-                      />
-                    ) : (
-                      <Clock className="size-3 shrink-0" />
-                    )}
+                    {scheduleLabel &&
+                      (scheduleIsSet ? (
+                        <span
+                          className={cn(
+                            "size-1.5 shrink-0 rounded-full",
+                            isTripFinish
+                              ? "bg-[#B57A36]"
+                              : isActivity
+                                ? "bg-[#7C5CBF]"
+                                : "bg-brand",
+                          )}
+                        />
+                      ) : (
+                        <Clock className="size-3 shrink-0" />
+                      ))}
                     {scheduleLabel}
+                    {!stop.hasLocation && (
+                      <span className="text-[#948B76]">
+                        {scheduleLabel && "· "}No location
+                      </span>
+                    )}
                   </span>
-                )}
-                {isTripStart && onSetDayStartTime && (
-                  <span className="flex min-w-0 items-center gap-1 text-[10px] font-bold text-[#71858B]">
-                    <span>Departs</span>
-                    <PlainTimeInput
-                      value={dayStartTime ?? ""}
-                      onChange={onSetDayStartTime}
-                      compact
-                      plain
-                    />
-                  </span>
-                )}
-              </span>
-              <span
-                className="mt-1.5 block cursor-text select-text truncate text-[15px] font-black leading-tight text-[#16130D]"
-                onClick={(event) => event.stopPropagation()}
-              >
-                {stop.name}
-              </span>
-              <span className="mt-1 block truncate text-[11.5px] font-medium text-[#948B76]">
-                {stop.address || "No address"}
-              </span>
+                )
+              )}
             </div>
 
             <div className="flex shrink-0 items-center gap-0.5">
@@ -313,7 +340,15 @@ export function StopCard({
                 <button
                   type="button"
                   onClick={onOpenNotes}
-                  className="grid size-7 place-items-center rounded-[8px] text-[#7A7264] opacity-100 transition-all hover:bg-[#EEE7DA] hover:text-brand focus:opacity-100 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100"
+                  className={cn(
+                    "grid size-7 place-items-center rounded-[8px] text-[#7A7264] opacity-100 transition-all focus:opacity-100",
+                    expanded
+                      ? "md:opacity-100"
+                      : "md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100",
+                    isActivity
+                      ? "hover:bg-[#E7DFF3] hover:text-[#6C4FA8]"
+                      : "hover:bg-[#EEE7DA] hover:text-brand",
+                  )}
                   title={`Open notes for ${stop.name}`}
                   aria-label={`Open notes for ${stop.name}`}
                 >
@@ -323,7 +358,12 @@ export function StopCard({
               <button
                 type="button"
                 onClick={toggleExpanded}
-                className="grid size-7 place-items-center rounded-[8px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                className={cn(
+                  "grid size-7 place-items-center rounded-[8px] text-muted-foreground transition-colors",
+                  isActivity
+                    ? "hover:bg-[#E7DFF3] hover:text-[#6C4FA8]"
+                    : "hover:bg-muted hover:text-foreground",
+                )}
                 title={expanded ? "Collapse item" : "Expand item"}
                 aria-label={expanded ? "Collapse item" : "Expand item"}
               >
@@ -339,9 +379,113 @@ export function StopCard({
         </div>
 
         {expanded && (
-          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-[#D8CEB8]/70 pt-3 font-mono text-[11px] font-semibold text-[#5F594D]">
-            <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5">
-              <div className="flex rounded-[8px] bg-[#EEE7DA] p-0.5 font-sans">
+          <div className="mt-3">
+            <div className="rounded-[13px] border border-[#DED3C0]/75 bg-white/20 p-2.5">
+              <div className="flex items-start gap-2.5">
+                <span
+                  className={cn(
+                    "grid size-10 shrink-0 place-items-center rounded-[10px]",
+                    isTripStart
+                      ? "bg-[#D9ECDF] text-[#2E7A57]"
+                      : isTripFinish
+                        ? "bg-[#F0DFC2] text-[#8A5524]"
+                        : isActivity
+                          ? "bg-[#E7DFF3] text-[#7657B4]"
+                          : "bg-[#F8E4DA] text-[#C44C28]",
+                  )}
+                >
+                  <MapPin className="size-4" />
+                </span>
+                <div className="flex min-h-10 min-w-0 flex-1 flex-col justify-center">
+                  {stop.hasLocation ? (
+                    <>
+                      <p className="truncate text-[11.5px] font-semibold leading-4 text-[#6F685B]">
+                        {stop.address || stop.name}
+                      </p>
+                      <p className="font-mono text-[9.5px] font-medium leading-4 text-[#A09888]">
+                        {stop.lat.toFixed(5)}, {stop.lng.toFixed(5)}
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-[11px] font-semibold text-[#948B76]">
+                      No location selected
+                    </p>
+                  )}
+                </div>
+                <div className="flex min-h-10 shrink-0 items-center gap-1">
+                  {stop.hasLocation && isActivity && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onUpdate({
+                          address: "",
+                          lat: 0,
+                          lng: 0,
+                          hasLocation: false,
+                          countryCode: null,
+                        });
+                        setEditingLocation(false);
+                      }}
+                      className={cn(
+                        "grid size-8 place-items-center rounded-[9px] text-[#817A6E] transition-colors",
+                        isActivity
+                          ? "hover:bg-[#E7DFF3] hover:text-[#6C4FA8]"
+                          : "hover:bg-[#FBE7DD] hover:text-[#B8431F]",
+                      )}
+                      title="Remove location"
+                      aria-label="Remove location"
+                    >
+                      <Trash2 className="size-3.5" />
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setEditingLocation((current) => !current)}
+                    className={cn(
+                      "grid size-8 place-items-center rounded-[9px] transition-colors",
+                      isTripStart
+                        ? "text-[#527762] hover:bg-[#D9ECDF] hover:text-[#256647]"
+                        : isTripFinish
+                          ? "text-[#866B4E] hover:bg-[#F0DFC2] hover:text-[#80501F]"
+                          : isActivity
+                            ? "text-[#765F9D] hover:bg-[#E7DFF3] hover:text-[#5F4295]"
+                            : "text-[#8A7268] hover:bg-[#F8E4DA] hover:text-[#B8431F]",
+                    )}
+                    title={
+                      stop.hasLocation ? "Change location" : "Add location"
+                    }
+                    aria-label={
+                      stop.hasLocation ? "Change location" : "Add location"
+                    }
+                  >
+                    <Pencil className="size-3" />
+                  </button>
+                </div>
+              </div>
+              {editingLocation && (
+                <div className="mt-3">
+                  <AddStopBox
+                    embedded
+                    onAdd={(result) => {
+                      onUpdate({
+                        address: result.address,
+                        lat: result.lat,
+                        lng: result.lng,
+                        hasLocation: true,
+                        countryCode: result.countryCode,
+                      });
+                      setEditingLocation(false);
+                    }}
+                    onClose={() => setEditingLocation(false)}
+                    placeholder="Search a new location"
+                    helpText=""
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="mt-2.5 flex flex-wrap items-center gap-2">
+              <div className="flex rounded-[10px] border border-[#DED3C0]/80 bg-white/20 p-0.5 font-sans">
                 {(
                   [
                     ["stop", "Stop", MapPin],
@@ -354,11 +498,11 @@ export function StopCard({
                     disabled={stop.itemType === type}
                     onClick={() => onUpdate({ itemType: type })}
                     className={cn(
-                      "inline-flex h-6 items-center gap-1 rounded-[6px] px-1.5 text-[9.5px] font-bold transition-colors",
+                      "inline-flex h-7 items-center gap-1.5 rounded-[7px] px-2 text-[9.5px] font-bold transition-colors",
                       stop.itemType === type
                         ? type === "activity"
-                          ? "bg-[#7C5CBF] text-white shadow-sm"
-                          : "bg-brand text-brand-foreground shadow-sm"
+                          ? "bg-[#7C5CBF] text-white"
+                          : "bg-brand text-brand-foreground"
                         : "text-[#7A7264] hover:text-foreground",
                     )}
                     aria-pressed={stop.itemType === type}
@@ -368,12 +512,8 @@ export function StopCard({
                   </button>
                 ))}
               </div>
-              <span
-                className="hidden h-4 w-px bg-[#D8CEB8] sm:block"
-                aria-hidden
-              />
-              <span className="flex items-center gap-1.5">
-                <span className="font-sans font-normal text-[#a89f88]">
+              <label className="flex h-8 items-center gap-2 rounded-[10px] border border-[#DED3C0]/80 bg-white/20 px-2.5">
+                <span className="font-sans text-[9px] font-black uppercase tracking-[0.08em] text-[#A09888]">
                   Visit
                 </span>
                 <PlainTimeInput
@@ -384,34 +524,96 @@ export function StopCard({
                   compact
                   plain
                 />
-              </span>
-            </div>
-            <div className="ml-auto flex shrink-0 items-center gap-1">
-              {onCopy && (
+              </label>
+              <div className="ml-auto flex shrink-0 items-center gap-1">
+                {onCopy && (
+                  <button
+                    type="button"
+                    onClick={onCopy}
+                    className={cn(
+                      "grid size-7 place-items-center rounded-[8px] text-[#7A7264] transition-colors",
+                      isActivity
+                        ? "hover:bg-[#E7DFF3] hover:text-[#6C4FA8]"
+                        : "hover:bg-[#FBE7DD] hover:text-brand",
+                    )}
+                    title={`Copy ${stop.name}`}
+                    aria-label={`Copy ${stop.name}`}
+                  >
+                    <Copy className="size-3.5" />
+                  </button>
+                )}
                 <button
                   type="button"
-                  onClick={onCopy}
-                  className="grid size-7 place-items-center rounded-[8px] text-[#7A7264] transition-colors hover:bg-[#FBE7DD] hover:text-brand"
-                  title={`Copy ${stop.name}`}
-                  aria-label={`Copy ${stop.name}`}
+                  onClick={onRemove}
+                  className={cn(
+                    "grid size-7 place-items-center rounded-[8px] text-[#817A6E] transition-colors",
+                    isActivity
+                      ? "hover:bg-[#E7DFF3] hover:text-[#6C4FA8]"
+                      : "hover:bg-[#FBE7DD] hover:text-destructive",
+                  )}
+                  title={`Delete ${stop.name}`}
+                  aria-label={`Delete ${stop.name}`}
                 >
-                  <Copy className="size-3.5" />
+                  <Trash2 className="size-3.5" />
                 </button>
-              )}
-              <button
-                type="button"
-                onClick={onRemove}
-                className="grid size-7 place-items-center rounded-[8px] text-[#A85A43] transition-colors hover:bg-[#FBE7DD] hover:text-destructive"
-                title={`Delete ${stop.name}`}
-                aria-label={`Delete ${stop.name}`}
-              >
-                <Trash2 className="size-3.5" />
-              </button>
+              </div>
             </div>
           </div>
         )}
       </div>
     </li>
+  );
+}
+
+function EditableStopName({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const [draft, setDraft] = useState(value);
+  const committedRef = useRef(value);
+
+  useEffect(() => {
+    setDraft(value);
+    committedRef.current = value;
+  }, [value]);
+
+  function commit() {
+    const next = draft.trim();
+    if (!next) {
+      setDraft(committedRef.current);
+      return;
+    }
+    if (next !== committedRef.current) {
+      committedRef.current = next;
+      setDraft(next);
+      onChange(next);
+    }
+  }
+
+  return (
+    <input
+      value={draft}
+      onChange={(event) => setDraft(event.target.value)}
+      onClick={(event) => event.stopPropagation()}
+      onBlur={commit}
+      onKeyDown={(event) => {
+        event.stopPropagation();
+        if (event.key === "Enter") {
+          event.preventDefault();
+          commit();
+          event.currentTarget.blur();
+        }
+        if (event.key === "Escape") {
+          setDraft(committedRef.current);
+          event.currentTarget.blur();
+        }
+      }}
+      className="block w-full min-w-0 truncate border-0 bg-transparent p-0 text-[15px] font-black leading-tight text-[#16130D] outline-none placeholder:text-[#A89F88] focus:ring-0"
+      aria-label="Stop name"
+    />
   );
 }
 

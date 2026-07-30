@@ -14,6 +14,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   useCallback,
@@ -189,6 +190,7 @@ function stayAsStop(stay: TripStayPlain, id: string): StopPoint {
     address: stay.address,
     lat: stay.lat ?? 0,
     lng: stay.lng ?? 0,
+    hasLocation: stay.lat != null && stay.lng != null,
     countryCode: stay.countryCode,
     itemType: "stop",
     travelMode: "driving",
@@ -206,6 +208,23 @@ function drivingRouteStops(stops: StopPoint[]) {
   return stops.filter(
     (stop, index) => index === 0 || stop.travelMode !== "walking",
   );
+}
+
+function inheritMissingLocations(
+  stops: StopPoint[],
+  initialAnchor?: StopPoint,
+) {
+  let anchor = initialAnchor?.hasLocation ? initialAnchor : undefined;
+  return stops.map((stop, index) => {
+    if (stop.hasLocation) {
+      anchor = stop;
+      return stop;
+    }
+
+    const fallback =
+      anchor ?? stops.slice(index + 1).find((item) => item.hasLocation);
+    return fallback ? { ...stop, lat: fallback.lat, lng: fallback.lng } : stop;
+  });
 }
 
 function routeStopsWithSelectedExcursion(
@@ -354,14 +373,20 @@ export function PlannerView({
     () =>
       Object.fromEntries(
         deferredMapDays.flatMap((day) =>
-          day.stops.map((stop, index) => [
-            stop.id,
-            stop.itemType === "activity"
-              ? "#7C5CBF"
-              : index === 0
-                ? "#16130D"
-                : "#E4562A",
-          ]),
+          day.stops.flatMap((stop, index) =>
+            stop.hasLocation
+              ? [
+                  [
+                    stop.id,
+                    stop.itemType === "activity"
+                      ? "#7C5CBF"
+                      : index === 0
+                        ? "#16130D"
+                        : "#E4562A",
+                  ] as const,
+                ]
+              : [],
+          ),
         ),
       ),
     [deferredMapDays],
@@ -370,7 +395,9 @@ export function PlannerView({
     () =>
       Object.fromEntries(
         deferredMapDays.flatMap((day) =>
-          day.stops.map((stop, index) => [stop.id, `${index + 1}`]),
+          day.stops.flatMap((stop, index) =>
+            stop.hasLocation ? ([[stop.id, `${index + 1}`]] as const) : [],
+          ),
         ),
       ),
     [deferredMapDays],
@@ -378,21 +405,29 @@ export function PlannerView({
   const currentStopColors = useMemo(
     () =>
       Object.fromEntries(
-        deferredCurrentStops.map((stop, index) => [
-          stop.id,
-          stop.itemType === "activity"
-            ? "#7C5CBF"
-            : index === 0
-              ? "#16130D"
-              : "#E4562A",
-        ]),
+        deferredCurrentStops.flatMap((stop, index) =>
+          stop.hasLocation
+            ? [
+                [
+                  stop.id,
+                  stop.itemType === "activity"
+                    ? "#7C5CBF"
+                    : index === 0
+                      ? "#16130D"
+                      : "#E4562A",
+                ] as const,
+              ]
+            : [],
+        ),
       ),
     [deferredCurrentStops],
   );
   const currentMarkerLabels = useMemo(
     () =>
       Object.fromEntries(
-        deferredCurrentStops.map((stop, index) => [stop.id, `${index + 1}`]),
+        deferredCurrentStops.flatMap((stop, index) =>
+          stop.hasLocation ? ([[stop.id, `${index + 1}`]] as const) : [],
+        ),
       ),
     [deferredCurrentStops],
   );
@@ -418,7 +453,7 @@ export function PlannerView({
         ) {
           points.push(stayAsStop(previousStay, `stay-start-${day.id}`));
         }
-        points.push(...day.stops);
+        points.push(...inheritMissingLocations(day.stops, points.at(-1)));
         if (stay?.lat != null && stay.lng != null) {
           points.push(stayAsStop(stay, `stay-end-${day.id}`));
         } else if (stay?.stayType === "driving_overnight" && nextDayFirstStop) {
@@ -427,7 +462,7 @@ export function PlannerView({
 
         return {
           ...day,
-          stops: drivingRouteStops(points),
+          stops: points,
           allRouteStops: points,
         };
       }),
@@ -437,7 +472,7 @@ export function PlannerView({
     () =>
       deferredRouteDays.flatMap((day) => {
         const stay = stays.find((item) => item.afterDayId === day.id);
-        const points = [...day.stops];
+        const points = day.stops.filter((stop) => stop.hasLocation);
         if (
           stay?.stayType !== "driving_overnight" &&
           stay?.lat != null &&
@@ -450,10 +485,16 @@ export function PlannerView({
     [deferredRouteDays, stays],
   );
   const currentRouteDay = routeDays.find((day) => day.id === currentDayId);
-  const currentRouteStops = currentRouteDay?.stops ?? currentStops;
+  const currentRouteStops = drivingRouteStops(
+    currentRouteDay?.stops ?? currentStops,
+  );
   const allCurrentRouteStops = currentRouteDay?.allRouteStops ?? currentStops;
   const currentMapStops = useMemo(
-    () => routeStopsWithSelectedExcursion(allCurrentRouteStops, selectedStopId),
+    () =>
+      routeStopsWithSelectedExcursion(
+        allCurrentRouteStops.filter((stop) => stop.hasLocation),
+        selectedStopId,
+      ),
     [allCurrentRouteStops, selectedStopId],
   );
   const dayMetrics = useRouteMetrics(routeDays);
@@ -834,6 +875,7 @@ export function PlannerView({
                 address: lastStop.address,
                 lat: lastStop.lat,
                 lng: lastStop.lng,
+                hasLocation: lastStop.hasLocation,
                 countryCode: lastStop.countryCode,
                 itemType: "stop",
                 travelMode: "driving",
@@ -1011,6 +1053,7 @@ export function PlannerView({
       address: data.address,
       lat: data.lat,
       lng: data.lng,
+      hasLocation: true,
       countryCode: data.countryCode,
       itemType,
       travelMode,
@@ -1070,6 +1113,79 @@ export function PlannerView({
       })),
     );
     return result.data.id;
+  }
+
+  async function addManualActivity(
+    dayId: string,
+    name: string,
+    visitDurationMin: number,
+  ) {
+    const optimisticId = `optimistic-stop-${randomId()}`;
+    const optimisticActivity: StopPoint = {
+      id: optimisticId,
+      name: name.trim(),
+      address: "",
+      lat: 0,
+      lng: 0,
+      hasLocation: false,
+      countryCode: null,
+      itemType: "activity",
+      travelMode: "walking",
+      startTime: null,
+      endTime: null,
+      category: null,
+      description: null,
+      visitDurationMin,
+      notes: null,
+      activities: [],
+    };
+    setDays((current) =>
+      current.map((day) =>
+        day.id === dayId
+          ? { ...day, stops: [...day.stops, optimisticActivity] }
+          : day,
+      ),
+    );
+
+    const result = await createTripStopAction(trip.id, dayId, {
+      name: name.trim(),
+      address: "",
+      latitude: null,
+      longitude: null,
+      countryCode: null,
+      stopType: "activity",
+      travelMode: "walking",
+      visitDurationMin,
+    });
+    if (!result.success) {
+      setDays((current) =>
+        current.map((day) =>
+          day.id === dayId
+            ? {
+                ...day,
+                stops: day.stops.filter((stop) => stop.id !== optimisticId),
+              }
+            : day,
+        ),
+      );
+      toast.error(result.error);
+      return;
+    }
+
+    setDays((current) =>
+      current.map((day) =>
+        day.id === dayId
+          ? {
+              ...day,
+              stops: day.stops.map((stop) =>
+                stop.id === optimisticId
+                  ? { ...stop, id: result.data.id }
+                  : stop,
+              ),
+            }
+          : day,
+      ),
+    );
   }
 
   function copyStop(stop: StopPoint) {
@@ -1157,6 +1273,7 @@ export function PlannerView({
         address: place.address,
         lat: place.lat,
         lng: place.lng,
+        hasLocation: true,
         countryCode: place.countryCode,
         itemType,
         travelMode,
@@ -1362,8 +1479,8 @@ export function PlannerView({
     const result = await updateTripStopAction(trip.id, stopId, {
       name: patch.name,
       address: patch.address,
-      latitude: patch.lat,
-      longitude: patch.lng,
+      latitude: patch.hasLocation === false ? null : patch.lat,
+      longitude: patch.hasLocation === false ? null : patch.lng,
       countryCode: patch.countryCode,
       stopType: patch.itemType,
       travelMode: patch.travelMode,
@@ -1556,7 +1673,6 @@ export function PlannerView({
             heroImageUrl: item.heroImageUrl,
           }))}
           activeTripId={trip.id}
-          onSelectTrip={(tripId) => router.push(`/trips/${tripId}`)}
         />
       )}
       <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
@@ -1774,6 +1890,13 @@ export function PlannerView({
                     onAddStop={(result, itemType) =>
                       void addStop(currentDay.id, result, itemType)
                     }
+                    onAddManualActivity={(name, visitDurationMin) =>
+                      void addManualActivity(
+                        currentDay.id,
+                        name,
+                        visitDurationMin,
+                      )
+                    }
                     onImportStops={(
                       results,
                       replaceExisting,
@@ -1949,7 +2072,6 @@ export function PlannerView({
             activeTab={tab}
             currentTrip={trip}
             trips={trips}
-            onSelectTrip={(tripId) => router.push(`/trips/${tripId}`)}
             onSelectTab={setTab}
           />
         )}
@@ -1962,15 +2084,14 @@ function FloatingTripNav({
   activeTab,
   currentTrip,
   trips,
-  onSelectTrip,
   onSelectTab,
 }: {
   activeTab: ViewKey;
   currentTrip: TripPlain;
   trips: TripSwitcherItem[];
-  onSelectTrip: (tripId: string) => void;
   onSelectTab: (tab: ViewKey) => void;
 }) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const switcherRef = useRef<HTMLDivElement>(null);
@@ -2033,12 +2154,19 @@ function FloatingTripNav({
               {sortedTrips.map((item) => {
                 const active = item.id === currentTrip.id;
                 return (
-                  <button
+                  <Link
                     key={item.id}
-                    type="button"
-                    onClick={() => {
+                    href={`/trips/${item.id}`}
+                    prefetch={false}
+                    onMouseEnter={() =>
+                      !active && router.prefetch(`/trips/${item.id}`)
+                    }
+                    onFocus={() =>
+                      !active && router.prefetch(`/trips/${item.id}`)
+                    }
+                    onClick={(event) => {
                       setOpen(false);
-                      if (!active) onSelectTrip(item.id);
+                      if (active) event.preventDefault();
                     }}
                     className={
                       "grid w-full grid-cols-[48px_minmax(0,1fr)_22px] items-center gap-3 rounded-[18px] px-2 py-2 text-left transition-colors " +
@@ -2067,7 +2195,7 @@ function FloatingTripNav({
                       </span>
                     </span>
                     {active && <Check className="size-4 text-brand" />}
-                  </button>
+                  </Link>
                 );
               })}
             </div>

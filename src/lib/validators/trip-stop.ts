@@ -11,8 +11,8 @@ const timeSchema = z
 export const tripStopCreateSchema = z.object({
   name: z.string().trim().min(1, "Stop name is required").max(120),
   address: z.string().trim().max(300).optional().or(z.literal("")),
-  latitude: z.number().min(-90).max(90),
-  longitude: z.number().min(-180).max(180),
+  latitude: z.number().min(-90).max(90).nullable().optional(),
+  longitude: z.number().min(-180).max(180).nullable().optional(),
   placeId: z.string().trim().max(300).optional(),
   countryCode: z.string().trim().length(2).toUpperCase().nullable().optional(),
   stopType: z.enum(STOP_TYPES).default("stop"),
