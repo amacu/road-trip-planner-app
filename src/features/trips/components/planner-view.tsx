@@ -17,6 +17,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
+  startTransition,
   useCallback,
   useDeferredValue,
   useEffect,
@@ -65,6 +66,7 @@ import type { AiTripDay } from "@/features/trips/components/ai-trip-import-dialo
 import { NewTripDialog } from "@/features/trips/components/new-trip-dialog";
 import { TripSummaryCard } from "@/features/trips/components/trip-summary-card";
 import { deleteTripAction, updateTripAction } from "@/features/trips/actions";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import type {
   StopPoint,
   TripPackingItemPlain,
@@ -317,6 +319,7 @@ export function PlannerView({
   const [activeDayId, setActiveDayId] = useState<string | null>(
     trip.days[0]?.id ?? null,
   );
+  const realtimeRefreshTimerRef = useRef<number | null>(null);
   // When true, the planner map shows the whole trip (all days' stops)
   // instead of just the active day — toggled by the "Trip summary" tile.
   const [showAllDays, setShowAllDays] = useState(false);
@@ -342,6 +345,114 @@ export function PlannerView({
   const currentDayIndex = currentDay
     ? days.findIndex((d) => d.id === currentDay.id)
     : -1;
+  const previousDayId =
+    currentDayIndex > 0 ? (days[currentDayIndex - 1]?.id ?? null) : null;
+  const currentRealtimeDayId = currentDay?.id ?? null;
+
+  useEffect(() => {
+    if (!currentRealtimeDayId) return;
+
+    const supabase = getSupabaseBrowserClient();
+    const relevantDayIds = new Set(
+      [currentRealtimeDayId, previousDayId].filter(
+        (dayId): dayId is string => dayId !== null,
+      ),
+    );
+
+    function scheduleRefresh() {
+      if (realtimeRefreshTimerRef.current) {
+        window.clearTimeout(realtimeRefreshTimerRef.current);
+      }
+
+      const refreshWhenIdle = () => {
+        const activeElement = document.activeElement;
+        const userIsEditing =
+          activeElement instanceof HTMLInputElement ||
+          activeElement instanceof HTMLTextAreaElement ||
+          activeElement instanceof HTMLSelectElement ||
+          activeElement?.getAttribute("contenteditable") === "true";
+
+        if (userIsEditing) {
+          realtimeRefreshTimerRef.current = window.setTimeout(
+            refreshWhenIdle,
+            750,
+          );
+          return;
+        }
+
+        realtimeRefreshTimerRef.current = null;
+        startTransition(() => router.refresh());
+      };
+
+      realtimeRefreshTimerRef.current = window.setTimeout(refreshWhenIdle, 350);
+    }
+
+    function handleChange(
+      table: "trip_days" | "trip_stops" | "trip_stays" | "trip_activities",
+      payload: {
+        eventType: string;
+        new: Record<string, unknown>;
+        old: Record<string, unknown>;
+      },
+    ) {
+      const record = payload.eventType === "DELETE" ? payload.old : payload.new;
+      const changedDayId =
+        table === "trip_days"
+          ? record.id
+          : table === "trip_stays"
+            ? record.after_day_id
+            : record.trip_day_id;
+
+      if (
+        table === "trip_days" ||
+        typeof changedDayId !== "string" ||
+        relevantDayIds.has(changedDayId)
+      ) {
+        scheduleRefresh();
+      }
+    }
+
+    const channel = supabase.channel(
+      `trip-planner:${trip.id}:${currentRealtimeDayId}`,
+    );
+
+    (
+      ["trip_days", "trip_stops", "trip_stays", "trip_activities"] as const
+    ).forEach((table) => {
+      channel.on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table,
+          filter: `trip_id=eq.${trip.id}`,
+        },
+        (payload: unknown) =>
+          handleChange(
+            table,
+            payload as {
+              eventType: string;
+              new: Record<string, unknown>;
+              old: Record<string, unknown>;
+            },
+          ),
+      );
+    });
+
+    channel.subscribe((status: string) => {
+      if (status === "CHANNEL_ERROR") {
+        console.warn("Could not subscribe to live trip updates.");
+      }
+    });
+
+    return () => {
+      if (realtimeRefreshTimerRef.current) {
+        window.clearTimeout(realtimeRefreshTimerRef.current);
+        realtimeRefreshTimerRef.current = null;
+      }
+      void supabase.removeChannel(channel);
+    };
+  }, [currentRealtimeDayId, previousDayId, router, trip.id]);
   const currentDayId = currentDay?.id;
   const currentStops = currentDay?.stops ?? [];
   const currentStay = stays.find((stay) => stay.afterDayId === currentDayId);
