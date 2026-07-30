@@ -329,6 +329,7 @@ export function PlannerView({
   // and shows its activities as extra pins while it's selected.
   const [selectedStopId, setSelectedStopId] = useState<string | null>(null);
   const [copiedStop, setCopiedStop] = useState<StopPoint | null>(null);
+  const pasteInFlightRef = useRef(false);
   const [tab, setTab] = useState<ViewKey>("overview");
   const [mobilePlannerPane, setMobilePlannerPane] = useState<
     "itinerary" | "map" | "notes"
@@ -1207,13 +1208,16 @@ export function PlannerView({
   }
 
   async function pasteCopiedStop(targetDayId: string): Promise<boolean> {
-    if (!copiedStop) return false;
+    if (!copiedStop || pasteInFlightRef.current) return false;
 
+    pasteInFlightRef.current = true;
+    const clipboardStop = copiedStop;
+    setCopiedStop(null);
     const optimisticId = `optimistic-stop-${randomId()}`;
     const optimisticCopy: StopPoint = {
-      ...copiedStop,
+      ...clipboardStop,
       id: optimisticId,
-      activities: copiedStop.activities.map((activity) => ({
+      activities: clipboardStop.activities.map((activity) => ({
         ...activity,
         id: `optimistic-activity-${randomId()}`,
       })),
@@ -1226,11 +1230,23 @@ export function PlannerView({
       ),
     );
 
-    const result = await duplicateTripStopAction(
-      trip.id,
-      copiedStop.id,
-      targetDayId,
-    );
+    let result: Awaited<ReturnType<typeof duplicateTripStopAction>>;
+    try {
+      result = await duplicateTripStopAction(
+        trip.id,
+        clipboardStop.id,
+        targetDayId,
+      );
+    } catch (error) {
+      console.error("Could not paste trip item", error);
+      result = {
+        success: false,
+        error: "The paste request failed. Please try again.",
+      };
+    } finally {
+      pasteInFlightRef.current = false;
+    }
+
     if (!result.success) {
       setDays((current) =>
         current.map((day) =>
@@ -1242,6 +1258,7 @@ export function PlannerView({
             : day,
         ),
       );
+      setCopiedStop(clipboardStop);
       toast.error(result.error);
       return false;
     }
@@ -1258,9 +1275,8 @@ export function PlannerView({
           : day,
       ),
     );
-    setCopiedStop(null);
     toast.success(
-      `${copiedStop.itemType === "activity" ? "Activity" : "Stop"} pasted.`,
+      `${clipboardStop.itemType === "activity" ? "Activity" : "Stop"} pasted.`,
     );
     return true;
   }

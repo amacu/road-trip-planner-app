@@ -148,9 +148,18 @@ export async function updateTripStop(
 ) {
   const stop = await prisma.tripStop.findFirst({
     where: { id: stopId, trip: tripWriteAccessWhere(userId) },
-    select: { id: true },
+    select: { id: true, latitude: true, longitude: true },
   });
   if (!stop) return null;
+  if (
+    data.stopType === "stop" &&
+    (data.latitude === null ||
+      data.longitude === null ||
+      (data.latitude === undefined && stop.latitude === null) ||
+      (data.longitude === undefined && stop.longitude === null))
+  ) {
+    return null;
+  }
 
   return prisma.tripStop.update({
     where: { id: stopId },
@@ -225,56 +234,59 @@ export async function duplicateTripStop(
   ]);
   if (!source || !targetDay) return null;
 
-  return prisma.$transaction(async (tx) => {
-    await tx.$executeRaw`SELECT id FROM trip_days WHERE id = ${targetDayId}::uuid FOR UPDATE`;
-    const highestOrder = await tx.tripStop.aggregate({
-      where: { tripDayId: targetDayId },
-      _max: { stopOrder: true },
-    });
+  return prisma.$transaction(
+    async (tx) => {
+      await tx.$executeRaw`SELECT id FROM trip_days WHERE id = ${targetDayId}::uuid FOR UPDATE`;
+      const highestOrder = await tx.tripStop.aggregate({
+        where: { tripDayId: targetDayId },
+        _max: { stopOrder: true },
+      });
 
-    return tx.tripStop.create({
-      data: {
-        tripId: targetDay.tripId,
-        tripDayId: targetDayId,
-        stopOrder: (highestOrder._max.stopOrder ?? 0) + 1,
-        name: source.name,
-        address: source.address,
-        latitude: source.latitude,
-        longitude: source.longitude,
-        googleMapsUrl: source.googleMapsUrl,
-        placeId: source.placeId,
-        countryCode: source.countryCode,
-        stopType: source.stopType,
-        travelMode: source.travelMode,
-        startTime: source.startTime,
-        endTime: source.endTime,
-        category: source.category,
-        description: source.description,
-        visitDurationMin: source.visitDurationMin,
-        notes: source.notes,
-        activities: {
-          create: source.activities.map((activity) => ({
-            tripId: targetDay.tripId,
-            tripDayId: targetDayId,
-            activityOrder: activity.activityOrder,
-            title: activity.title,
-            address: activity.address,
-            latitude: activity.latitude,
-            longitude: activity.longitude,
-            googleMapsUrl: activity.googleMapsUrl,
-            placeId: activity.placeId,
-            description: activity.description,
-            startTime: activity.startTime,
-            endTime: activity.endTime,
-            category: activity.category,
-          })),
+      return tx.tripStop.create({
+        data: {
+          tripId: targetDay.tripId,
+          tripDayId: targetDayId,
+          stopOrder: (highestOrder._max.stopOrder ?? 0) + 1,
+          name: source.name,
+          address: source.address,
+          latitude: source.latitude,
+          longitude: source.longitude,
+          googleMapsUrl: source.googleMapsUrl,
+          placeId: source.placeId,
+          countryCode: source.countryCode,
+          stopType: source.stopType,
+          travelMode: source.travelMode,
+          startTime: source.startTime,
+          endTime: source.endTime,
+          category: source.category,
+          description: source.description,
+          visitDurationMin: source.visitDurationMin,
+          notes: source.notes,
+          activities: {
+            create: source.activities.map((activity) => ({
+              tripId: targetDay.tripId,
+              tripDayId: targetDayId,
+              activityOrder: activity.activityOrder,
+              title: activity.title,
+              address: activity.address,
+              latitude: activity.latitude,
+              longitude: activity.longitude,
+              googleMapsUrl: activity.googleMapsUrl,
+              placeId: activity.placeId,
+              description: activity.description,
+              startTime: activity.startTime,
+              endTime: activity.endTime,
+              category: activity.category,
+            })),
+          },
         },
-      },
-      include: {
-        activities: { orderBy: { activityOrder: "asc" } },
-      },
-    });
-  });
+        include: {
+          activities: { orderBy: { activityOrder: "asc" } },
+        },
+      });
+    },
+    { maxWait: 10_000, timeout: 30_000 },
+  );
 }
 
 /**

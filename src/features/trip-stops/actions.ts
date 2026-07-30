@@ -117,7 +117,16 @@ export async function duplicateTripStopAction(
     return { success: false, error: "Invalid stop or day." };
   }
 
-  const copy = await duplicateTripStop(stopId, targetDayId, user.id);
+  let copy: Awaited<ReturnType<typeof duplicateTripStop>>;
+  try {
+    copy = await duplicateTripStop(stopId, targetDayId, user.id);
+  } catch (error) {
+    console.error("Could not duplicate trip stop", error);
+    return {
+      success: false,
+      error: "The database could not copy this item. Please try again.",
+    };
+  }
   if (!copy) {
     return { success: false, error: "Stop or target day not found." };
   }

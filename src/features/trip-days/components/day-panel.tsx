@@ -193,8 +193,11 @@ export function DayPanel({
   async function pasteCopiedStop() {
     if (isPasting || !copiedItemName) return;
     setIsPasting(true);
-    await onPasteCopiedStop();
-    setIsPasting(false);
+    try {
+      await onPasteCopiedStop();
+    } finally {
+      setIsPasting(false);
+    }
   }
 
   function walkingExcursionCountAfter(stopIndex: number) {
@@ -457,7 +460,11 @@ export function DayPanel({
                     dayStartTime={day.startTime ?? ""}
                     onSetDayStartTime={onSetDayStartTime}
                     onUpdate={(patch) => onUpdateStop(stop.id, patch)}
-                    onCopy={() => onCopyStop(stop)}
+                    onCopy={
+                      stop.id.startsWith("optimistic-stop-")
+                        ? undefined
+                        : () => onCopyStop(stop)
+                    }
                     onRemove={() => onRemoveStop(stop.id)}
                     onMoveUp={() => moveStop(i, -1)}
                     onMoveDown={() => moveStop(i, 1)}

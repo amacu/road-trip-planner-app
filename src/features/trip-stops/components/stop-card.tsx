@@ -518,7 +518,10 @@ export function StopCard({
                   <button
                     key={type}
                     type="button"
-                    disabled={stop.itemType === type}
+                    disabled={
+                      stop.itemType === type ||
+                      (type === "stop" && !stop.hasLocation)
+                    }
                     onClick={() => onUpdate({ itemType: type })}
                     className={cn(
                       "inline-flex h-7 items-center gap-1.5 rounded-[7px] px-2 text-[9.5px] font-bold transition-colors",
@@ -527,8 +530,16 @@ export function StopCard({
                           ? "bg-[#7C5CBF] text-white"
                           : "bg-brand text-brand-foreground"
                         : "text-[#7A7264] hover:text-foreground",
+                      type === "stop" &&
+                        !stop.hasLocation &&
+                        "cursor-not-allowed opacity-35",
                     )}
                     aria-pressed={stop.itemType === type}
+                    title={
+                      type === "stop" && !stop.hasLocation
+                        ? "Add a location before changing this activity to a stop"
+                        : undefined
+                    }
                   >
                     <Icon className="size-3" />
                     {label}

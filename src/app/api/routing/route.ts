@@ -33,6 +33,34 @@ const routeCache = new Map<
 >();
 const inFlightRoutes = new Map<string, Promise<RoutingResult>>();
 
+function estimatedRoute(
+  profile: "driving" | "walking",
+  locations: Array<{ lat: number; lng: number }>,
+): RoutingResult {
+  const speedKmh = profile === "walking" ? 5 : 70;
+  const legs = locations.slice(1).map((location, index) => {
+    const distanceKm = haversineKm(locations[index], location);
+    return {
+      distance: distanceKm * 1000,
+      duration: distanceKm === 0 ? 0 : (distanceKm / speedKmh) * 3600,
+    };
+  });
+
+  return {
+    code: "Ok",
+    routes: [
+      {
+        distance: legs.reduce((sum, leg) => sum + leg.distance, 0),
+        duration: legs.reduce((sum, leg) => sum + leg.duration, 0),
+        geometry: {
+          coordinates: locations.map(({ lat, lng }) => [lng, lat]),
+        },
+        legs,
+      },
+    ],
+  };
+}
+
 async function withRoutingSlot<T>(task: () => Promise<T>): Promise<T> {
   if (activeRequests >= MAX_CONCURRENT_REQUESTS) {
     await new Promise<void>((resolve) => waitingRequests.push(resolve));
@@ -104,6 +132,9 @@ async function requestRoute(
       cache: "no-store",
     });
 
+    if (response.status === 400) {
+      return estimatedRoute(profile, locations);
+    }
     if (!response.ok) {
       throw new Error(`Valhalla returned ${response.status}.`);
     }

@@ -203,6 +203,32 @@ async function fetchOsrmRoute(
   profile: "driving" | "walking",
 ): Promise<DrivingRoute | null> {
   if (stops.length < 2) return null;
+  if (
+    stops.some(
+      (stop) =>
+        !Number.isFinite(stop.lat) ||
+        !Number.isFinite(stop.lng) ||
+        stop.lat < -90 ||
+        stop.lat > 90 ||
+        stop.lng < -180 ||
+        stop.lng > 180,
+    )
+  ) {
+    return null;
+  }
+
+  if (
+    stops.every(
+      (stop) => stop.lat === stops[0].lat && stop.lng === stops[0].lng,
+    )
+  ) {
+    return {
+      path: stops.map((stop) => [stop.lat, stop.lng]),
+      distanceKm: 0,
+      durationMin: 0,
+      legs: stops.slice(1).map(() => ({ distanceKm: 0, durationMin: 0 })),
+    };
+  }
 
   const coordinates = stops.map((s) => `${s.lng},${s.lat}`).join(";");
   const params = new URLSearchParams({
