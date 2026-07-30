@@ -404,7 +404,11 @@ export function PlannerView({
         }
       }
     } catch {
-      window.localStorage.removeItem(storageKey);
+      try {
+        window.localStorage.removeItem(storageKey);
+      } catch {
+        // Storage can be unavailable in private/restricted mobile browsers.
+      }
     } finally {
       setViewStateReady(true);
     }
@@ -413,18 +417,22 @@ export function PlannerView({
   useEffect(() => {
     if (!viewStateReady) return;
 
-    window.localStorage.setItem(
-      `trip-planner-view:${trip.id}`,
-      JSON.stringify({
-        tab,
-        activeDayId,
-        showAllDays,
-        rightPanelMode,
-        mobilePlannerPane,
-        selectedStopId,
-        notesStopId: notesFocus?.stopId ?? null,
-      }),
-    );
+    try {
+      window.localStorage.setItem(
+        `trip-planner-view:${trip.id}`,
+        JSON.stringify({
+          tab,
+          activeDayId,
+          showAllDays,
+          rightPanelMode,
+          mobilePlannerPane,
+          selectedStopId,
+          notesStopId: notesFocus?.stopId ?? null,
+        }),
+      );
+    } catch {
+      // View persistence is optional and must not break the planner.
+    }
   }, [
     activeDayId,
     mobilePlannerPane,

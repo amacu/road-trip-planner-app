@@ -163,7 +163,11 @@ export function DayPanel({
         localStorage.getItem(storageKey) ?? "{}",
       ) as typeof saved;
     } catch {
-      localStorage.removeItem(storageKey);
+      try {
+        localStorage.removeItem(storageKey);
+      } catch {
+        // Storage can be unavailable in private/restricted mobile browsers.
+      }
     }
 
     setExpandedStopIds(new Set(saved.expandedStopIds ?? []));
@@ -190,13 +194,17 @@ export function DayPanel({
     } catch {
       // A malformed old value can be replaced safely.
     }
-    localStorage.setItem(
-      storageKey,
-      JSON.stringify({
-        ...saved,
-        expandedStopIds: [...expandedStopIds],
-      }),
-    );
+    try {
+      localStorage.setItem(
+        storageKey,
+        JSON.stringify({
+          ...saved,
+          expandedStopIds: [...expandedStopIds],
+        }),
+      );
+    } catch {
+      // UI persistence is optional and must not break the planner.
+    }
   }, [day.id, expandedStopIds, hydratedUiDayId]);
 
   function persistScrollPosition() {
@@ -211,13 +219,17 @@ export function DayPanel({
       } catch {
         // A malformed old value can be replaced safely.
       }
-      localStorage.setItem(
-        storageKey,
-        JSON.stringify({
-          ...saved,
-          scrollTop: scrollContainerRef.current?.scrollTop ?? 0,
-        }),
-      );
+      try {
+        localStorage.setItem(
+          storageKey,
+          JSON.stringify({
+            ...saved,
+            scrollTop: scrollContainerRef.current?.scrollTop ?? 0,
+          }),
+        );
+      } catch {
+        // UI persistence is optional and must not break the planner.
+      }
     }, 120);
   }
 

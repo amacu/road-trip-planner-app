@@ -23,6 +23,9 @@ export default function Error({
         <p className="mt-2 text-sm text-muted-foreground">
           Something went wrong. You can try refreshing or head back to your app.
         </p>
+        <p className="mt-2 font-mono text-xs text-muted-foreground">
+          Error code: {error.digest ?? "client-error"}
+        </p>
         <div className="mt-6 flex justify-center gap-2">
           <button
             onClick={reset}
