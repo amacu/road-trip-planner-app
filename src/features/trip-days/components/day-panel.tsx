@@ -5,6 +5,7 @@ import {
   Check,
   ChevronDown,
   ChevronUp,
+  ClipboardPaste,
   Copy,
   Footprints,
   Landmark,
@@ -64,6 +65,7 @@ export type AiDayRouteItem = AiDayImportItem & {
 export function DayPanel({
   day,
   index,
+  isLastDay = false,
   dateLabel,
   stops,
   legs,
@@ -74,6 +76,9 @@ export function DayPanel({
   onUpdateStop,
   onRemoveStop,
   onReorderStops,
+  copiedItemName,
+  onCopyStop,
+  onPasteCopiedStop,
   onSetDayStartTime,
   onLaunchNav,
   onOpenStopNotes,
@@ -86,6 +91,7 @@ export function DayPanel({
 }: {
   day: TripDayPlain;
   index: number;
+  isLastDay?: boolean;
   dateLabel: string | null;
   stops: StopPoint[];
   legs: Array<{ distanceKm: number; durationMin: number }>;
@@ -101,6 +107,9 @@ export function DayPanel({
   onUpdateStop: (stopId: string, patch: Partial<StopPoint>) => void;
   onRemoveStop: (stopId: string) => void;
   onReorderStops: (orderedStopIds: string[]) => void;
+  copiedItemName?: string;
+  onCopyStop: (stop: StopPoint) => void;
+  onPasteCopiedStop: () => Promise<boolean>;
   onSetDayStartTime: (startTime: string) => void;
   onLaunchNav: () => void;
   onOpenStopNotes?: (stopId: string) => void;
@@ -116,6 +125,7 @@ export function DayPanel({
     null,
   );
   const [aiImportOpen, setAiImportOpen] = useState(false);
+  const [isPasting, setIsPasting] = useState(false);
   const [walkingExcursionsCollapsed, setWalkingExcursionsCollapsed] =
     useState(false);
   const [expandedWalkingExcursionIds, setExpandedWalkingExcursionIds] =
@@ -127,9 +137,13 @@ export function DayPanel({
     addItemRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
   }, [addingType]);
 
+  const scheduleStops =
+    index === 0 && stops.length > 0
+      ? [{ ...stops[0], visitDurationMin: null }, ...stops.slice(1)]
+      : stops;
   const schedule = computeStopSchedule(
     day.startTime,
-    stops,
+    scheduleStops,
     legs,
     startLeg?.durationMin,
   );
@@ -147,6 +161,13 @@ export function DayPanel({
     if (!movedStop) return;
     reordered.splice(destination, 0, movedStop);
     onReorderStops(reordered.map((stop) => stop.id));
+  }
+
+  async function pasteCopiedStop() {
+    if (isPasting || !copiedItemName) return;
+    setIsPasting(true);
+    await onPasteCopiedStop();
+    setIsPasting(false);
   }
 
   function walkingExcursionCountAfter(stopIndex: number) {
@@ -216,6 +237,22 @@ export function DayPanel({
         >
           <Navigation className="size-4" />
         </button>
+        {copiedItemName && (
+          <button
+            type="button"
+            onClick={pasteCopiedStop}
+            disabled={isPasting}
+            className="grid size-10 place-items-center rounded-[12px] border border-[#E7A58F] bg-[#FBE7DD] text-brand shadow-sm transition-colors hover:bg-[#F8D8CA] disabled:opacity-45"
+            title={`Paste ${copiedItemName}`}
+            aria-label={`Paste ${copiedItemName}`}
+          >
+            {isPasting ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <ClipboardPaste className="size-4" />
+            )}
+          </button>
+        )}
         <button
           type="button"
           onClick={() => setAiImportOpen(true)}
@@ -263,6 +300,22 @@ export function DayPanel({
             >
               <Navigation className="size-4" />
             </button>
+            {copiedItemName && (
+              <button
+                type="button"
+                onClick={pasteCopiedStop}
+                disabled={isPasting}
+                className="grid size-[34px] place-items-center rounded-[10px] border border-[#E7A58F] bg-[#FBE7DD] text-brand transition-colors hover:bg-[#F8D8CA] disabled:opacity-45"
+                title={`Paste ${copiedItemName}`}
+                aria-label={`Paste ${copiedItemName}`}
+              >
+                {isPasting ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <ClipboardPaste className="size-4" />
+                )}
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setAiImportOpen(true)}
@@ -340,11 +393,14 @@ export function DayPanel({
                     }
                     isFirst={i === 0}
                     isLast={i === stops.length - 1}
+                    isTripStart={index === 0 && i === 0}
+                    isTripFinish={isLastDay && i === stops.length - 1}
                     arrivalTime={schedule[i]?.arrivalTime ?? null}
                     departureTime={schedule[i]?.departureTime ?? null}
                     dayStartTime={day.startTime ?? ""}
                     onSetDayStartTime={onSetDayStartTime}
                     onUpdate={(patch) => onUpdateStop(stop.id, patch)}
+                    onCopy={() => onCopyStop(stop)}
                     onRemove={() => onRemoveStop(stop.id)}
                     onMoveUp={() => moveStop(i, -1)}
                     onMoveDown={() => moveStop(i, 1)}

@@ -34,6 +34,7 @@ model Trip {
   name              String
   description       String?
   startDate         DateTime? @map("start_date") @db.Date
+  dayCount          Int?      @map("day_count")
   heroImageUrl      String?   @map("hero_image_url")
   packingCategories Json?     @map("packing_categories")
   createdAt         DateTime  @default(now()) @map("created_at")

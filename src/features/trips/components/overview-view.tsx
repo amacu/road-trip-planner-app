@@ -29,7 +29,9 @@ import {
 } from "@/features/trips/actions";
 import { TripSettingsPanel } from "@/features/trips/components/trip-settings-view";
 import type {
+  StopPoint,
   TripPlain,
+  TripStayPlain,
   VehiclePlain,
 } from "@/features/trips/lib/trip-view-model";
 import { buildDayStopColors, formatDistance, formatDuration } from "@/lib/geo";
@@ -48,9 +50,30 @@ const MapView = dynamic(
   { ssr: false },
 );
 
+function stayAsMapStop(stay: TripStayPlain): StopPoint {
+  return {
+    id: `stay-overview-${stay.id}`,
+    name: stay.name,
+    address: stay.address,
+    lat: stay.lat ?? 0,
+    lng: stay.lng ?? 0,
+    countryCode: stay.countryCode,
+    itemType: "stop",
+    travelMode: "driving",
+    startTime: null,
+    endTime: null,
+    category: null,
+    description: null,
+    visitDurationMin: null,
+    notes: stay.notes,
+    activities: [],
+  };
+}
+
 export function OverviewView({
   trip,
   days,
+  stays,
   currentUserId,
   vehicles,
   tripTotalKm,
@@ -64,6 +87,7 @@ export function OverviewView({
 }: {
   trip: TripPlain;
   days: TripPlain["days"];
+  stays: TripStayPlain[];
   currentUserId: string;
   vehicles: VehiclePlain[];
   tripTotalKm: number;
@@ -77,13 +101,23 @@ export function OverviewView({
 }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const allStops = days.flatMap((day) => day.stops);
-  const overviewMapStops = allStops.filter(
-    (stop) => stop.itemType !== "activity",
-  );
+  const overviewMapStops = days.flatMap((day) => {
+    const dayStops = day.stops.filter((stop) => stop.itemType !== "activity");
+    const stay = stays.find((item) => item.afterDayId === day.id);
+    if (
+      stay?.stayType !== "driving_overnight" &&
+      stay?.lat != null &&
+      stay.lng != null
+    ) {
+      dayStops.push(stayAsMapStop(stay));
+    }
+    return dayStops;
+  });
   const stopColors = buildDayStopColors(days);
   const stopCount = allStops.length;
-  const routeStart = allStops[0]?.name ?? "Start";
-  const routeEnd = allStops[allStops.length - 1]?.name ?? "Finish";
+  const routeStart = overviewMapStops[0]?.name ?? "Start";
+  const routeEnd =
+    overviewMapStops[overviewMapStops.length - 1]?.name ?? "Finish";
   const dateRange = formatTripDateRange(trip.startDate, days.length);
   const statCards = [
     {
@@ -189,6 +223,7 @@ export function OverviewView({
         <div className="mt-4">
           <TheRouteCard
             days={days}
+            stays={stays}
             stopCount={stopCount}
             onSelectDay={onSelectDay}
           />
@@ -200,16 +235,12 @@ export function OverviewView({
       </div>
 
       <section className="relative hidden min-h-[400px] lg:block">
-        <MapView
-          stops={overviewMapStops}
-          stopColors={stopColors}
-          showRoute={false}
-        />
+        <MapView stops={overviewMapStops} stopColors={stopColors} />
       </section>
 
       <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
-        <DialogContent className="max-h-[86vh] overflow-y-auto bg-[#F3EDE1] sm:max-w-2xl">
-          <DialogHeader>
+        <DialogContent className="max-h-[92vh] overflow-y-auto border-[#D8CEB8] bg-[#F3EDE1] p-4 sm:max-w-3xl sm:rounded-[26px] sm:p-6">
+          <DialogHeader className="sr-only">
             <DialogTitle>Trip settings</DialogTitle>
           </DialogHeader>
           <TripSettingsPanel
@@ -227,22 +258,38 @@ export function OverviewView({
 
 function TheRouteCard({
   days,
+  stays,
   stopCount,
   onSelectDay,
 }: {
   days: TripPlain["days"];
+  stays: TripStayPlain[];
   stopCount: number;
   onSelectDay: (dayId: string) => void;
 }) {
-  const routeStops = days.flatMap((day, dayIndex) =>
-    day.stops.map((stop) => ({
+  const routeStops = days.flatMap((day, dayIndex) => {
+    const dayLabel = day.name || `Day ${dayIndex + 1}`;
+    const points = day.stops.map((stop) => ({
       id: stop.id,
       name: stop.name,
       region: stopRegion(stop.address),
-      dayLabel: day.name || `Day ${dayIndex + 1}`,
+      dayLabel,
       dayId: day.id,
-    })),
-  );
+      isStay: false,
+    }));
+    const stay = stays.find((item) => item.afterDayId === day.id);
+    if (stay && stay.stayType !== "driving_overnight") {
+      points.push({
+        id: `stay-overview-${stay.id}`,
+        name: stay.name,
+        region: stopRegion(stay.address),
+        dayLabel,
+        dayId: day.id,
+        isStay: true,
+      });
+    }
+    return points;
+  });
   const [expanded, setExpanded] = useState(false);
   const visibleStops = expanded ? routeStops : routeStops.slice(0, 5);
   const hiddenStops = Math.max(routeStops.length - visibleStops.length, 0);
@@ -263,7 +310,9 @@ function TheRouteCard({
         <div>
           {visibleStops.map((stop, index) => {
             const pin = routePinColor(index);
-            const tag = routeStopTag(index, routeStops.length);
+            const tag = stop.isStay
+              ? "Night"
+              : routeStopTag(index, routeStops.length);
             return (
               <button
                 key={stop.id}

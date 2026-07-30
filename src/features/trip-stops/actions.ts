@@ -1,18 +1,22 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 
 import { requireAuthenticatedUser, requireUser } from "@/lib/auth/guards";
 import { type ActionResult } from "@/lib/action-result";
 import {
   createTripStop,
   deleteTripStop,
+  duplicateTripStop,
   importTripDayStops,
   reorderTripStops,
   updateTripStop,
 } from "@/lib/db/trip-stops";
 import {
+  toStopPoint,
   toTripStopSummaryPlain,
+  type StopPoint,
   type TripStopSummaryPlain,
 } from "@/features/trips/lib/trip-view-model";
 import {
@@ -98,6 +102,28 @@ export async function deleteTripStopAction(
 
   revalidatePath(`/trips/${tripId}`);
   return { success: true, data: undefined };
+}
+
+export async function duplicateTripStopAction(
+  tripId: string,
+  stopId: string,
+  targetDayId: string,
+): Promise<ActionResult<StopPoint>> {
+  const user = await requireUser();
+  const ids = z
+    .object({ stopId: z.string().uuid(), targetDayId: z.string().uuid() })
+    .safeParse({ stopId, targetDayId });
+  if (!ids.success) {
+    return { success: false, error: "Invalid stop or day." };
+  }
+
+  const copy = await duplicateTripStop(stopId, targetDayId, user.id);
+  if (!copy) {
+    return { success: false, error: "Stop or target day not found." };
+  }
+
+  revalidatePath(`/trips/${tripId}`);
+  return { success: true, data: toStopPoint(copy) };
 }
 
 export async function reorderTripStopsAction(

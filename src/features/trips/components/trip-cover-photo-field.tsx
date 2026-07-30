@@ -48,35 +48,32 @@ export function TripCoverPhotoField({
   const displayUrl = preview ?? heroImageUrl;
 
   return (
-    <div className="rounded-lg border border-border bg-white p-5 shadow-sm">
-      <h2 className="text-lg font-black tracking-tight">Cover photo</h2>
-      <p className="mt-1 text-sm text-muted-foreground">
-        Shown at the top of the trip overview. JPEG, PNG, WEBP, or GIF, up to
-        8MB.
-      </p>
+    <div className="relative overflow-hidden rounded-[22px] border border-[#D8CEB8] bg-[#E4562A] shadow-[0_12px_30px_rgba(22,19,13,0.1)]">
+      <div className="relative h-[170px]">
+        {displayUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={displayUrl} alt="" className="h-full w-full object-cover" />
+        ) : (
+          <div className="grid h-full w-full place-items-center bg-[radial-gradient(circle_at_75%_20%,#F6A07D_0,transparent_35%),linear-gradient(135deg,#E4562A,#B8431F)] text-white/75">
+            <ImagePlus className="size-10" />
+          </div>
+        )}
+        <div className="absolute inset-0 bg-gradient-to-t from-[#16130D]/75 via-[#16130D]/10 to-transparent" />
+        {isUploading && (
+          <div className="absolute inset-0 grid place-items-center bg-[#16130D]/45 backdrop-blur-sm">
+            <Loader2 className="size-6 animate-spin text-white" />
+          </div>
+        )}
 
-      <div className="mt-4 flex items-center gap-4">
-        <div className="relative size-24 shrink-0 overflow-hidden rounded-xl border border-border bg-gradient-to-br from-brand to-[#f0834f]">
-          {displayUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={displayUrl}
-              alt=""
-              className="h-full w-full object-cover"
-            />
-          ) : (
-            <div className="grid h-full w-full place-items-center text-white/70">
-              <ImagePlus className="size-6" />
-            </div>
-          )}
-          {isUploading && (
-            <div className="absolute inset-0 grid place-items-center bg-black/40">
-              <Loader2 className="size-5 animate-spin text-white" />
-            </div>
-          )}
-        </div>
-
-        <div>
+        <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-4 p-4 sm:p-5">
+          <div className="min-w-0 text-white">
+            <p className="text-[10px] font-black uppercase tracking-[0.14em] text-white/65">
+              Trip cover
+            </p>
+            <p className="mt-1 text-sm font-bold">
+              Set the mood for your route
+            </p>
+          </div>
           <input
             ref={inputRef}
             type="file"
@@ -88,10 +85,10 @@ export function TripCoverPhotoField({
             type="button"
             onClick={() => inputRef.current?.click()}
             disabled={isUploading}
-            className="inline-flex items-center gap-2 rounded-md border border-input bg-white px-3 py-2 text-sm font-semibold hover:bg-muted disabled:opacity-50"
+            className="inline-flex h-10 shrink-0 items-center gap-2 rounded-[11px] border border-white/35 bg-white/90 px-3.5 text-xs font-black text-[#16130D] shadow-lg backdrop-blur transition hover:bg-white disabled:opacity-50"
           >
-            <Camera className="size-4" />
-            {heroImageUrl ? "Change photo" : "Upload photo"}
+            <Camera className="size-4 text-brand" />
+            {heroImageUrl ? "Change" : "Upload"}
           </button>
         </div>
       </div>

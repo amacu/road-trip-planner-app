@@ -3,7 +3,10 @@
 import {
   ChevronDown,
   ChevronUp,
+  CircleCheckBig,
   Clock,
+  Copy,
+  Flag,
   Landmark,
   MapPin,
   NotebookPen,
@@ -37,11 +40,16 @@ export function StopCard({
   showDriveSpine = false,
   isFirst = false,
   isLast = false,
+  isTripStart = false,
+  isTripFinish = false,
   arrivalTime = null,
   departureTime = null,
+  dayStartTime = "",
+  onSetDayStartTime,
   showSchedule = true,
   headerAction,
   onUpdate,
+  onCopy,
   onRemove,
   onMoveUp,
   onMoveDown,
@@ -56,6 +64,10 @@ export function StopCard({
   showDriveSpine?: boolean;
   isFirst?: boolean;
   isLast?: boolean;
+  /** Marks the first stop of day one as the trip's point of departure. */
+  isTripStart?: boolean;
+  /** Marks the final stop of the final day as the trip's destination. */
+  isTripFinish?: boolean;
   arrivalTime?: string | null;
   departureTime?: string | null;
   dayStartTime?: string;
@@ -65,6 +77,7 @@ export function StopCard({
   /** Extra control rendered next to the expand/remove buttons, e.g. "Move to day". */
   headerAction?: React.ReactNode;
   onUpdate: (patch: Partial<StopPoint>) => void;
+  onCopy?: () => void;
   onRemove: () => void;
   onMoveUp: () => void;
   onMoveDown: () => void;
@@ -79,20 +92,35 @@ export function StopCard({
   }
 
   const isActivity = stop.itemType === "activity";
-  const markerColor = isActivity ? "#7C5CBF" : isFirst ? "#16130D" : "#E4562A";
+  const markerColor = isTripFinish
+    ? "#8A5524"
+    : isTripStart
+      ? "#2E7A57"
+      : isActivity
+        ? "#7C5CBF"
+        : isFirst
+          ? "#16130D"
+          : "#E4562A";
+  const hasVisitDuration = (stop.visitDurationMin ?? 0) > 0;
   const scheduleLabel = !showSchedule
     ? null
-    : isFirst
-      ? arrivalTime
-        ? `${arrivalTime}${departureTime ? ` – ${departureTime}` : ""}`
-        : "Set start time"
-      : isLast
-        ? arrivalTime
-          ? `Arrives ${arrivalTime}`
-          : "Set start time"
-        : arrivalTime
-          ? `${arrivalTime}${departureTime ? ` – ${departureTime}` : ""}`
-          : "Set start time";
+    : isTripStart
+      ? null
+      : !isActivity && arrivalTime
+        ? hasVisitDuration && departureTime
+          ? `${arrivalTime} – ${departureTime}`
+          : `Arrives ${arrivalTime}`
+        : isFirst
+          ? arrivalTime
+            ? `${arrivalTime}${departureTime ? ` – ${departureTime}` : ""}`
+            : "Set start time"
+          : isLast
+            ? arrivalTime
+              ? `Arrives ${arrivalTime}`
+              : "Set start time"
+            : arrivalTime
+              ? `${arrivalTime}${departureTime ? ` – ${departureTime}` : ""}`
+              : "Set start time";
   const scheduleIsSet = Boolean(arrivalTime);
 
   return (
@@ -121,20 +149,34 @@ export function StopCard({
       <div
         className={cn(
           "relative z-[1] flex flex-col overflow-hidden rounded-[18px] border px-3.5 py-3 shadow-[0_5px_16px_rgba(22,19,13,0.04)] transition-all duration-200",
-          isActivity
+          isTripFinish
             ? expanded
-              ? "border-[#A88DDA] bg-[#F0ECF6] shadow-[0_10px_24px_rgba(124,92,191,0.12)]"
-              : "border-[#D8CDE8] bg-[#F3EFF8] hover:border-[#BCA9DF] hover:bg-[#F0ECF6] hover:shadow-[0_9px_22px_rgba(124,92,191,0.1)]"
-            : expanded
-              ? "border-brand/50 bg-[#F8F1E6] shadow-[0_10px_24px_rgba(228,86,42,0.1)]"
-              : "border-[#DED3C0] bg-[#F8F4EC] hover:border-[#CDBFA6] hover:bg-[#FAF6EE] hover:shadow-[0_9px_22px_rgba(22,19,13,0.08)]",
+              ? "border-[#C99A5B] bg-[#F7EEDC] shadow-[0_10px_24px_rgba(138,85,36,0.12)]"
+              : "border-[#DFC49A] bg-[#FBF4E7] hover:border-[#C99A5B] hover:bg-[#F7EEDC] hover:shadow-[0_10px_24px_rgba(138,85,36,0.1)]"
+            : isTripStart
+              ? expanded
+                ? "border-[#79A78F] bg-[#E7F1EA] shadow-[0_10px_24px_rgba(46,122,87,0.12)]"
+                : "border-[#A9C9B7] bg-[#EDF5EF] hover:border-[#79A78F] hover:bg-[#E7F1EA] hover:shadow-[0_10px_24px_rgba(46,122,87,0.1)]"
+              : isActivity
+                ? expanded
+                  ? "border-[#A88DDA] bg-[#F0ECF6] shadow-[0_10px_24px_rgba(124,92,191,0.12)]"
+                  : "border-[#D8CDE8] bg-[#F3EFF8] hover:border-[#BCA9DF] hover:bg-[#F0ECF6] hover:shadow-[0_9px_22px_rgba(124,92,191,0.1)]"
+                : expanded
+                  ? "border-brand/50 bg-[#F8F1E6] shadow-[0_10px_24px_rgba(228,86,42,0.1)]"
+                  : "border-[#DED3C0] bg-[#F8F4EC] hover:border-[#CDBFA6] hover:bg-[#FAF6EE] hover:shadow-[0_9px_22px_rgba(22,19,13,0.08)]",
         )}
       >
         <span
           aria-hidden
           className={cn(
             "absolute inset-y-3 left-0 w-[3px] rounded-r-full",
-            isActivity ? "bg-[#7C5CBF]" : "bg-brand",
+            isTripFinish
+              ? "bg-[#B57A36]"
+              : isTripStart
+                ? "bg-[#2E7A57]"
+                : isActivity
+                  ? "bg-[#7C5CBF]"
+                  : "bg-brand",
           )}
         />
 
@@ -154,7 +196,13 @@ export function StopCard({
               <span
                 className={cn(
                   "mx-auto size-1.5 rounded-full",
-                  isActivity ? "bg-[#7C5CBF]" : "bg-brand",
+                  isTripFinish
+                    ? "bg-[#B57A36]"
+                    : isTripStart
+                      ? "bg-[#2E7A57]"
+                      : isActivity
+                        ? "bg-[#7C5CBF]"
+                        : "bg-brand",
                 )}
               />
               <button
@@ -172,7 +220,13 @@ export function StopCard({
               className="grid size-8 place-items-center rounded-full font-mono text-[12px] font-black text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.16)]"
               style={{ background: markerColor }}
             >
-              {index + 1}
+              {isTripFinish ? (
+                <CircleCheckBig className="size-4" />
+              ) : isTripStart ? (
+                <Flag className="size-4" />
+              ) : (
+                index + 1
+              )}
             </div>
           </div>
 
@@ -193,12 +247,22 @@ export function StopCard({
                 <span
                   className={cn(
                     "shrink-0 rounded-full px-1.5 py-0.5 text-[8px] font-black uppercase tracking-[0.1em]",
-                    isActivity
-                      ? "bg-[#F0EAFB] text-[#6C4FA8]"
-                      : "bg-[#FBE7DD] text-[#B8431F]",
+                    isTripFinish
+                      ? "bg-[#F0DFC2] text-[#80501F]"
+                      : isTripStart
+                        ? "bg-[#D9ECDF] text-[#256647]"
+                        : isActivity
+                          ? "bg-[#F0EAFB] text-[#6C4FA8]"
+                          : "bg-[#FBE7DD] text-[#B8431F]",
                   )}
                 >
-                  {isActivity ? "Activity" : "Stop"}
+                  {isTripFinish
+                    ? "Finish"
+                    : isTripStart
+                      ? "Start"
+                      : isActivity
+                        ? "Activity"
+                        : "Stop"}
                 </span>
                 {scheduleLabel && (
                   <span
@@ -218,6 +282,17 @@ export function StopCard({
                       <Clock className="size-3 shrink-0" />
                     )}
                     {scheduleLabel}
+                  </span>
+                )}
+                {isTripStart && onSetDayStartTime && (
+                  <span className="flex min-w-0 items-center gap-1 text-[10px] font-bold text-[#71858B]">
+                    <span>Departs</span>
+                    <PlainTimeInput
+                      value={dayStartTime ?? ""}
+                      onChange={onSetDayStartTime}
+                      compact
+                      plain
+                    />
                   </span>
                 )}
               </span>
@@ -311,15 +386,28 @@ export function StopCard({
                 />
               </span>
             </div>
-            <button
-              type="button"
-              onClick={onRemove}
-              className="ml-auto grid size-7 shrink-0 place-items-center rounded-[8px] text-[#A85A43] transition-colors hover:bg-[#FBE7DD] hover:text-destructive"
-              title={`Delete ${stop.name}`}
-              aria-label={`Delete ${stop.name}`}
-            >
-              <Trash2 className="size-3.5" />
-            </button>
+            <div className="ml-auto flex shrink-0 items-center gap-1">
+              {onCopy && (
+                <button
+                  type="button"
+                  onClick={onCopy}
+                  className="grid size-7 place-items-center rounded-[8px] text-[#7A7264] transition-colors hover:bg-[#FBE7DD] hover:text-brand"
+                  title={`Copy ${stop.name}`}
+                  aria-label={`Copy ${stop.name}`}
+                >
+                  <Copy className="size-3.5" />
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={onRemove}
+                className="grid size-7 place-items-center rounded-[8px] text-[#A85A43] transition-colors hover:bg-[#FBE7DD] hover:text-destructive"
+                title={`Delete ${stop.name}`}
+                aria-label={`Delete ${stop.name}`}
+              >
+                <Trash2 className="size-3.5" />
+              </button>
+            </div>
           </div>
         )}
       </div>

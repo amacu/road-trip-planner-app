@@ -206,6 +206,77 @@ export async function deleteTripStop(stopId: string, userId: string) {
   return result.count > 0;
 }
 
+export async function duplicateTripStop(
+  stopId: string,
+  targetDayId: string,
+  userId: string,
+) {
+  const [source, targetDay] = await Promise.all([
+    prisma.tripStop.findFirst({
+      where: { id: stopId, trip: tripWriteAccessWhere(userId) },
+      include: {
+        activities: { orderBy: { activityOrder: "asc" } },
+      },
+    }),
+    prisma.tripDay.findFirst({
+      where: { id: targetDayId, trip: tripWriteAccessWhere(userId) },
+      select: { id: true, tripId: true },
+    }),
+  ]);
+  if (!source || !targetDay) return null;
+
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT id FROM trip_days WHERE id = ${targetDayId}::uuid FOR UPDATE`;
+    const highestOrder = await tx.tripStop.aggregate({
+      where: { tripDayId: targetDayId },
+      _max: { stopOrder: true },
+    });
+
+    return tx.tripStop.create({
+      data: {
+        tripId: targetDay.tripId,
+        tripDayId: targetDayId,
+        stopOrder: (highestOrder._max.stopOrder ?? 0) + 1,
+        name: source.name,
+        address: source.address,
+        latitude: source.latitude,
+        longitude: source.longitude,
+        googleMapsUrl: source.googleMapsUrl,
+        placeId: source.placeId,
+        countryCode: source.countryCode,
+        stopType: source.stopType,
+        travelMode: source.travelMode,
+        startTime: source.startTime,
+        endTime: source.endTime,
+        category: source.category,
+        description: source.description,
+        visitDurationMin: source.visitDurationMin,
+        notes: source.notes,
+        activities: {
+          create: source.activities.map((activity) => ({
+            tripId: targetDay.tripId,
+            tripDayId: targetDayId,
+            activityOrder: activity.activityOrder,
+            title: activity.title,
+            address: activity.address,
+            latitude: activity.latitude,
+            longitude: activity.longitude,
+            googleMapsUrl: activity.googleMapsUrl,
+            placeId: activity.placeId,
+            description: activity.description,
+            startTime: activity.startTime,
+            endTime: activity.endTime,
+            category: activity.category,
+          })),
+        },
+      },
+      include: {
+        activities: { orderBy: { activityOrder: "asc" } },
+      },
+    });
+  });
+}
+
 /**
  * Persists a new stop order for a day in one transaction. `orderedStopIds`
  * must be the full, final ordering of every stop in the day.

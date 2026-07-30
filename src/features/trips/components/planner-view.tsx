@@ -54,6 +54,7 @@ import {
 import {
   createTripStopAction,
   deleteTripStopAction,
+  duplicateTripStopAction,
   importTripDayStopsAction,
   reorderTripStopsAction,
   updateTripStopAction,
@@ -259,6 +260,8 @@ export function PlannerView({
   const [isImportingTrip, setIsImportingTrip] = useState(false);
   const [tripAiOpen, setTripAiOpen] = useState(false);
   const dayWriteQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const stopReorderQueuesRef = useRef(new Map<string, Promise<void>>());
+  const stopReorderVersionsRef = useRef(new Map<string, number>());
   useEffect(() => {
     setDays(trip.days);
   }, [trip.days]);
@@ -306,6 +309,7 @@ export function PlannerView({
   // The stop a user expanded in the day panel — the map recenters on it
   // and shows its activities as extra pins while it's selected.
   const [selectedStopId, setSelectedStopId] = useState<string | null>(null);
+  const [copiedStop, setCopiedStop] = useState<StopPoint | null>(null);
   const [tab, setTab] = useState<ViewKey>("overview");
   const [mobilePlannerPane, setMobilePlannerPane] = useState<
     "itinerary" | "map" | "notes"
@@ -429,6 +433,22 @@ export function PlannerView({
       }),
     [deferredRouteDays, stays],
   );
+  const wholeTripStops = useMemo(
+    () =>
+      deferredRouteDays.flatMap((day) => {
+        const stay = stays.find((item) => item.afterDayId === day.id);
+        const points = [...day.stops];
+        if (
+          stay?.stayType !== "driving_overnight" &&
+          stay?.lat != null &&
+          stay.lng != null
+        ) {
+          points.push(stayAsStop(stay, `stay-trip-${stay.id}`));
+        }
+        return points;
+      }),
+    [deferredRouteDays, stays],
+  );
   const currentRouteDay = routeDays.find((day) => day.id === currentDayId);
   const currentRouteStops = currentRouteDay?.stops ?? currentStops;
   const allCurrentRouteStops = currentRouteDay?.allRouteStops ?? currentStops;
@@ -507,7 +527,6 @@ export function PlannerView({
       result.data,
     ]);
     toast.success("Night plan saved.");
-    router.refresh();
     return true;
   }
 
@@ -840,6 +859,7 @@ export function PlannerView({
     );
 
     setIsAddingDay(false);
+    router.refresh();
   }
 
   function openDayInPlanner(dayId: string) {
@@ -872,6 +892,7 @@ export function PlannerView({
       const removedIndex = days.findIndex((day) => day.id === dayId);
       const removedDay = days[removedIndex];
       if (!removedDay || dayId.startsWith("optimistic-day-")) return;
+      const removedStay = stays.find((stay) => stay.afterDayId === dayId);
 
       const previousActiveDayId = activeDayId;
       const nextDays = days
@@ -887,6 +908,9 @@ export function PlannerView({
       // Remove the day from the screen before any database work starts.
       flushSync(() => {
         setDays(nextDays);
+        setStays((current) =>
+          current.filter((stay) => stay.afterDayId !== dayId),
+        );
         setActiveDayId(nextActiveDayId);
       });
 
@@ -902,12 +926,41 @@ export function PlannerView({
             setActiveDayId((current) =>
               current === nextActiveDayId ? previousActiveDayId : current,
             );
+            if (removedStay) {
+              setStays((current) =>
+                current.some((stay) => stay.id === removedStay.id)
+                  ? current
+                  : [...current, removedStay],
+              );
+            }
             toast.error(result.error);
+            return;
+          }
+
+          const replacement = result.data.replacementDay;
+          if (replacement) {
+            setDays((current) => {
+              if (current.some((day) => day.id === replacement.id)) {
+                return current;
+              }
+              return [
+                ...current,
+                {
+                  id: replacement.id,
+                  dayNumber: replacement.dayNumber,
+                  date: null,
+                  name: replacement.name,
+                  notes: null,
+                  startTime: null,
+                  stops: [],
+                },
+              ].sort((a, b) => a.dayNumber - b.dayNumber);
+            });
           }
         },
       );
     },
-    [isImportingTrip, days, activeDayId, trip.id],
+    [isImportingTrip, days, stays, activeDayId, trip.id],
   );
 
   async function setDayStartTime(dayId: string, startTime: string) {
@@ -1017,6 +1070,75 @@ export function PlannerView({
       })),
     );
     return result.data.id;
+  }
+
+  function copyStop(stop: StopPoint) {
+    setCopiedStop({
+      ...stop,
+      activities: stop.activities.map((activity) => ({ ...activity })),
+    });
+    toast.success(
+      `${stop.itemType === "activity" ? "Activity" : "Stop"} copied.`,
+    );
+  }
+
+  async function pasteCopiedStop(targetDayId: string): Promise<boolean> {
+    if (!copiedStop) return false;
+
+    const optimisticId = `optimistic-stop-${randomId()}`;
+    const optimisticCopy: StopPoint = {
+      ...copiedStop,
+      id: optimisticId,
+      activities: copiedStop.activities.map((activity) => ({
+        ...activity,
+        id: `optimistic-activity-${randomId()}`,
+      })),
+    };
+    setDays((current) =>
+      current.map((day) =>
+        day.id === targetDayId
+          ? { ...day, stops: [...day.stops, optimisticCopy] }
+          : day,
+      ),
+    );
+
+    const result = await duplicateTripStopAction(
+      trip.id,
+      copiedStop.id,
+      targetDayId,
+    );
+    if (!result.success) {
+      setDays((current) =>
+        current.map((day) =>
+          day.id === targetDayId
+            ? {
+                ...day,
+                stops: day.stops.filter((stop) => stop.id !== optimisticId),
+              }
+            : day,
+        ),
+      );
+      toast.error(result.error);
+      return false;
+    }
+
+    setDays((current) =>
+      current.map((day) =>
+        day.id === targetDayId
+          ? {
+              ...day,
+              stops: day.stops.map((stop) =>
+                stop.id === optimisticId ? result.data : stop,
+              ),
+            }
+          : day,
+      ),
+    );
+    setCopiedStop(null);
+    toast.success(
+      `${copiedStop.itemType === "activity" ? "Activity" : "Stop"} pasted.`,
+    );
+    return true;
   }
 
   async function importDayStops(
@@ -1305,9 +1427,12 @@ export function PlannerView({
   }
 
   function reorderStops(dayId: string, orderedStopIds: string[]) {
-    // Optimistic: reorder locally first so the UI settles immediately,
-    // then persist in the background. Roll back only if the save fails.
-    const previousDays = days;
+    // Keep the UI optimistic, but serialize writes for each day. Without the
+    // queue, an older request can finish after a newer one and restore stale
+    // stop_order values in the database.
+    const version = (stopReorderVersionsRef.current.get(dayId) ?? 0) + 1;
+    stopReorderVersionsRef.current.set(dayId, version);
+
     setDays((current) =>
       current.map((day) => {
         if (day.id !== dayId) return day;
@@ -1321,16 +1446,34 @@ export function PlannerView({
       }),
     );
 
-    reorderTripStopsAction(trip.id, { dayId, stopIds: orderedStopIds }).then(
-      (result) => {
-        if (!result.success) {
-          setDays(previousDays);
+    const persist = async () => {
+      try {
+        const result = await reorderTripStopsAction(trip.id, {
+          dayId,
+          stopIds: orderedStopIds,
+        });
+        if (result.success) return;
+        if (stopReorderVersionsRef.current.get(dayId) === version) {
           toast.error(result.error);
-          return;
+          router.refresh();
         }
-        router.refresh();
-      },
-    );
+      } catch {
+        if (stopReorderVersionsRef.current.get(dayId) === version) {
+          toast.error("Could not save the new stop order.");
+          router.refresh();
+        }
+      }
+    };
+
+    const previousQueue =
+      stopReorderQueuesRef.current.get(dayId) ?? Promise.resolve();
+    const nextQueue = previousQueue.then(persist, persist);
+    stopReorderQueuesRef.current.set(dayId, nextQueue);
+    void nextQueue.finally(() => {
+      if (stopReorderQueuesRef.current.get(dayId) === nextQueue) {
+        stopReorderQueuesRef.current.delete(dayId);
+      }
+    });
   }
 
   function reorderDays(orderedDayIds: string[]) {
@@ -1428,6 +1571,7 @@ export function PlannerView({
           <OverviewView
             trip={trip}
             days={days}
+            stays={stays}
             currentUserId={currentUserId}
             vehicles={vehicles}
             tripTotalKm={tripTotalKm}
@@ -1532,6 +1676,11 @@ export function PlannerView({
                   days.map((day, i) => {
                     const metric = dayMetrics[day.id];
                     const stops = day.stops;
+                    const routeDay = routeDays.find(
+                      (item) => item.id === day.id,
+                    );
+                    const routeStops =
+                      stops.length > 0 ? (routeDay?.stops ?? stops) : [];
                     const dayDate = getDayDate(i, trip.startDate);
                     const dateLabel = formatDayDateLabel(dayDate);
                     return (
@@ -1544,8 +1693,13 @@ export function PlannerView({
                         isLast={i === days.length - 1}
                         distanceKm={metric?.distanceKm ?? 0}
                         driveMin={metric?.driveMin ?? 0}
-                        firstStopName={stops[0]?.name}
-                        lastStopName={stops[stops.length - 1]?.name}
+                        firstStopName={routeStops[0]?.name}
+                        lastStopName={routeStops[routeStops.length - 1]?.name}
+                        routePointCount={routeStops.length}
+                        isEmpty={
+                          stops.length === 0 &&
+                          !stays.some((stay) => stay.afterDayId === day.id)
+                        }
                         active={!showAllDays && day.id === currentDayId}
                         onSelect={selectDay}
                         onRemove={removeDay}
@@ -1609,6 +1763,7 @@ export function PlannerView({
                     key={currentDay.id}
                     day={currentDay}
                     index={currentDayIndex}
+                    isLastDay={currentDayIndex === days.length - 1}
                     dateLabel={formatDayDateLabel(
                       getDayDate(currentDayIndex, trip.startDate),
                     )}
@@ -1636,6 +1791,9 @@ export function PlannerView({
                     onUpdateStop={updateStop}
                     onRemoveStop={removeStop}
                     onReorderStops={(ids) => reorderStops(currentDay.id, ids)}
+                    copiedItemName={copiedStop?.name}
+                    onCopyStop={copyStop}
+                    onPasteCopiedStop={() => pasteCopiedStop(currentDay.id)}
                     onSetDayStartTime={(startTime) =>
                       setDayStartTime(currentDay.id, startTime)
                     }
@@ -1644,7 +1802,14 @@ export function PlannerView({
                     onSelectStop={setSelectedStopId}
                     stay={currentStay}
                     previousStay={previousStay}
-                    showStay
+                    showStay={
+                      Boolean(currentStay) ||
+                      !(
+                        trip.dayCount !== null &&
+                        currentDayIndex === trip.dayCount - 1 &&
+                        currentStops.length > 0
+                      )
+                    }
                     onSaveStay={saveStay}
                     onDeleteStay={() => removeStay(currentStay?.id)}
                   />
@@ -1714,7 +1879,7 @@ export function PlannerView({
                   </div>
                 ) : showAllDays ? (
                   <MapView
-                    stops={allStops}
+                    stops={wholeTripStops}
                     viewportKey={`trip-${trip.id}`}
                     stopColors={allStopColors}
                     markerLabels={allMarkerLabels}

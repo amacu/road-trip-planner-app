@@ -38,6 +38,12 @@ const LABELS = Object.fromEntries(
   STAY_OPTIONS.map(([value, label]) => [value, label]),
 ) as Record<string, string>;
 
+const DRIVING_OVERNIGHT_NAME = "Driving overnight";
+
+function isAutomaticDrivingName(value: string) {
+  return /^driv(?:e|es|ing) overnight$/i.test(value.trim());
+}
+
 export function StayCard({
   dayId,
   stay,
@@ -247,8 +253,19 @@ export function StayDialog({
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (type === "driving_overnight" && !name) setName("Driving overnight");
+    if (type === "driving_overnight" && !name) {
+      setName(DRIVING_OVERNIGHT_NAME);
+    }
   }, [name, type]);
+
+  function selectType(nextType: (typeof STAY_TYPES)[number]) {
+    if (nextType === "driving_overnight") {
+      setName(DRIVING_OVERNIGHT_NAME);
+    } else if (type === "driving_overnight" && isAutomaticDrivingName(name)) {
+      setName(place?.name ?? "");
+    }
+    setType(nextType);
+  }
 
   async function submit() {
     setSaving(true);
@@ -257,7 +274,7 @@ export function StayDialog({
       name:
         name.trim() ||
         (type === "driving_overnight"
-          ? "Driving overnight"
+          ? DRIVING_OVERNIGHT_NAME
           : (place?.name ?? "Overnight stay")),
       stayType: type,
       status: "planned",
@@ -296,7 +313,7 @@ export function StayDialog({
             <button
               key={value}
               type="button"
-              onClick={() => setType(value)}
+              onClick={() => selectType(value)}
               className={`flex min-h-[72px] flex-col items-start justify-between rounded-[13px] border p-3 text-left text-xs font-bold transition ${
                 type === value
                   ? "border-[#E4562A] bg-[#FBE7DD] text-[#B8431F]"
@@ -381,7 +398,9 @@ export function StayDialog({
               <AddStopBox
                 onAdd={(result) => {
                   setPlace(result);
-                  if (!name) setName(result.name);
+                  if (!name.trim() || isAutomaticDrivingName(name)) {
+                    setName(result.name);
+                  }
                 }}
                 placeholder="Search hotel, camping or parking"
                 helpText="Optional. If left empty, the night's location will be the last stop of this day."

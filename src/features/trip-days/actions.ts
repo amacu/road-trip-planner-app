@@ -75,7 +75,7 @@ export async function updateTripDayAction(
 export async function deleteTripDayAction(
   tripId: string,
   dayId: string,
-): Promise<ActionResult> {
+): Promise<ActionResult<{ replacementDay: TripDaySummaryPlain | null }>> {
   const user = await requireUser();
   const deleted = await deleteTripDay(dayId, user.id);
   if (!deleted) {
@@ -83,7 +83,14 @@ export async function deleteTripDayAction(
   }
 
   revalidatePath(`/trips/${tripId}`);
-  return { success: true, data: undefined };
+  return {
+    success: true,
+    data: {
+      replacementDay: deleted.replacementDay
+        ? toTripDaySummaryPlain(deleted.replacementDay)
+        : null,
+    },
+  };
 }
 
 export async function reorderTripDaysAction(

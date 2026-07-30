@@ -187,6 +187,7 @@ export type TripPlain = {
   name: string;
   description: string | null;
   startDate: string | null;
+  dayCount: number | null;
   heroImageUrl: string | null;
   vehicle: VehiclePlain | null;
   members: TripMemberPlain[];
@@ -239,6 +240,7 @@ export function toTripPlain(trip: TripWithRelations): TripPlain {
     startDate: trip.startDate
       ? trip.startDate.toISOString().slice(0, 10)
       : null,
+    dayCount: trip.dayCount,
     heroImageUrl: trip.heroImageUrl,
     vehicle: trip.vehicle ? toVehiclePlain(trip.vehicle) : null,
     members: trip.members.map(toTripMemberPlain),

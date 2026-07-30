@@ -14,6 +14,13 @@ export const tripCreateSchema = z.object({
   description: z.string().trim().max(300).optional().or(z.literal("")),
   vehicleId: z.string().uuid().optional().nullable(),
   startDate: dateInputSchema.optional().or(z.literal("")),
+  dayCount: z
+    .number()
+    .int()
+    .min(1, "Choose at least one day.")
+    .max(365, "A trip can have at most 365 days.")
+    .nullable()
+    .optional(),
 });
 
 export const tripUpdateSchema = tripCreateSchema.partial();

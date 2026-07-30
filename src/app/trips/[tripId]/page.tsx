@@ -8,6 +8,7 @@ import {
 } from "@/features/trips/lib/trip-view-model";
 import { requireAuthenticatedUser } from "@/lib/auth/guards";
 import { getCachedFuelPriceCountries } from "@/lib/db/fuel-prices";
+import { withDatabaseRetry } from "@/lib/db/retry";
 import { getUserProfileByUserId } from "@/lib/db/user-profiles";
 import { getTripById, getTripSwitcherItems } from "@/lib/db/trips";
 import { getVehicles } from "@/lib/db/vehicles";
@@ -26,12 +27,14 @@ export default async function TripPlannerPage({
 }) {
   const { tripId } = await params;
   const user = await requireAuthenticatedUser();
-  const [trip, vehicles, trips, fuelPrices] = await Promise.all([
-    getTripById(tripId, user.id),
-    getVehicles(user.id),
-    getTripSwitcherItems(user.id),
-    getCachedFuelPriceCountries(),
-  ]);
+  const [trip, vehicles, trips, fuelPrices] = await withDatabaseRetry(() =>
+    Promise.all([
+      getTripById(tripId, user.id),
+      getVehicles(user.id),
+      getTripSwitcherItems(user.id),
+      getCachedFuelPriceCountries(),
+    ]),
+  );
 
   if (!trip) notFound();
   const userMetadata = user.user_metadata ?? {};
@@ -49,7 +52,7 @@ export default async function TripPlannerPage({
               ? userMetadata.username
               : null,
         }
-      : await getUserProfileByUserId(trip.userId);
+      : await withDatabaseRetry(() => getUserProfileByUserId(trip.userId));
   const plainTrip = toTripPlain(trip);
 
   return (

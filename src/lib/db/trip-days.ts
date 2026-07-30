@@ -19,7 +19,7 @@ export async function createTripDay(
 ) {
   const trip = await prisma.trip.findFirst({
     where: { id: tripId, ...tripWriteAccessWhere(userId) },
-    select: { id: true },
+    select: { id: true, dayCount: true },
   });
   if (!trip) return null;
 
@@ -66,6 +66,12 @@ export async function createTripDay(
         startTime: data.startTime || null,
       },
     });
+    if (trip.dayCount !== null && dayNumber > trip.dayCount) {
+      await tx.trip.update({
+        where: { id: tripId },
+        data: { dayCount: dayNumber },
+      });
+    }
 
     const carryOverStop = previousLastStop
       ? await tx.tripStop.create({
@@ -125,16 +131,16 @@ export async function deleteTripDay(dayId: string, userId: string) {
   return prisma.$transaction(async (tx) => {
     const day = await tx.tripDay.findFirst({
       where: { id: dayId, trip: tripWriteAccessWhere(userId) },
-      select: { id: true, tripId: true },
+      select: { id: true, tripId: true, trip: { select: { dayCount: true } } },
     });
-    if (!day) return false;
+    if (!day) return null;
 
     await tx.$executeRaw`SELECT id FROM trips WHERE id = ${day.tripId}::uuid FOR UPDATE`;
 
     const result = await tx.tripDay.deleteMany({
       where: { id: day.id, tripId: day.tripId },
     });
-    if (result.count === 0) return false;
+    if (result.count === 0) return null;
 
     // Move every remaining number outside the unique-key range first, then
     // compact the sequence back to 1..n. Doing both steps under the trip-row
@@ -156,7 +162,20 @@ export async function deleteTripDay(dayId: string, userId: string) {
       WHERE day.id = ordered.id
     `;
 
-    return true;
+    const remainingCount = await tx.tripDay.count({
+      where: { tripId: day.tripId },
+    });
+    const replacementDay =
+      day.trip.dayCount !== null && remainingCount < day.trip.dayCount
+        ? await tx.tripDay.create({
+            data: {
+              tripId: day.tripId,
+              dayNumber: remainingCount + 1,
+            },
+          })
+        : null;
+
+    return { replacementDay };
   });
 }
 

@@ -10,6 +10,7 @@ import {
   canWriteTrip,
   createTrip,
   deleteTrip,
+  duplicateTrip,
   removeTripMember,
   updateTrip,
   updateTripMemberRole,
@@ -146,6 +147,27 @@ export async function deleteTripAction(tripId: string): Promise<ActionResult> {
 
   revalidatePath("/");
   return { success: true, data: undefined };
+}
+
+export async function duplicateTripAction(
+  tripId: string,
+): Promise<ActionResult<TripSummaryPlain>> {
+  const user = await requireUser();
+  try {
+    const copy = await duplicateTrip(tripId, user.id);
+    if (!copy) {
+      return { success: false, error: "Trip not found." };
+    }
+
+    revalidatePath("/");
+    return { success: true, data: toTripSummaryPlain(copy) };
+  } catch (error) {
+    console.error("Trip duplication failed", error);
+    return {
+      success: false,
+      error: "Could not duplicate the trip. Please try again.",
+    };
+  }
 }
 
 export async function addTripMemberAction(

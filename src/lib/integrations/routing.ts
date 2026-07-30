@@ -205,7 +205,11 @@ async function fetchOsrmRoute(
   if (stops.length < 2) return null;
 
   const coordinates = stops.map((s) => `${s.lng},${s.lat}`).join(";");
-  const params = new URLSearchParams({ profile, coordinates });
+  const params = new URLSearchParams({
+    profile,
+    coordinates,
+    routingVersion: "2",
+  });
 
   const res = await fetch(`/api/routing?${params.toString()}`, {
     headers: { Accept: "application/json" },

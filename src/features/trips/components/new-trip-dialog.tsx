@@ -33,7 +33,12 @@ export function NewTripDialog({
     formState: { errors, isSubmitting },
   } = useForm<TripCreateInput>({
     resolver: zodResolver(tripCreateSchema),
-    defaultValues: { name: "", description: "", startDate: "" },
+    defaultValues: {
+      name: "",
+      description: "",
+      startDate: "",
+      dayCount: null,
+    },
   });
 
   async function onSubmit(data: TripCreateInput) {

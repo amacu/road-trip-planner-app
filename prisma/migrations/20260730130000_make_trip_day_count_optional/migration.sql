@@ -1,0 +1,3 @@
+ALTER TABLE "trips"
+ALTER COLUMN "day_count" DROP NOT NULL,
+ALTER COLUMN "day_count" DROP DEFAULT;

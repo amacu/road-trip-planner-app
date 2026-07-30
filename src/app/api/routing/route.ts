@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+import { haversineKm } from "@/lib/geo";
+
 type ValhallaResponse = {
   trip?: {
     summary?: { length?: number; time?: number };
@@ -122,17 +124,47 @@ async function requestRoute(
       throw new Error("Valhalla returned an incomplete route.");
     }
 
+    const straightDistanceKm = locations
+      .slice(1)
+      .reduce(
+        (total, location, index) =>
+          total + haversineKm(locations[index], location),
+        0,
+      );
+    const walkingSpeedKmh =
+      durationSeconds > 0 ? distanceKm / (durationSeconds / 3600) : Infinity;
+    const implausibleWalkingRoute =
+      profile === "walking" &&
+      (walkingSpeedKmh > 15 ||
+        distanceKm > Math.max(straightDistanceKm * 4, straightDistanceKm + 10));
+    const resolvedDistanceKm = implausibleWalkingRoute
+      ? straightDistanceKm
+      : distanceKm;
+    const resolvedDurationSeconds = implausibleWalkingRoute
+      ? Math.max(60, Math.round((straightDistanceKm / 5) * 3600))
+      : durationSeconds;
+    const resolvedGeometry = implausibleWalkingRoute
+      ? locations.map(({ lat, lng }) => [lng, lat] as [number, number])
+      : geometry;
+
     const result: RoutingResult = {
       code: "Ok",
       routes: [
         {
-          distance: distanceKm * 1000,
-          duration: durationSeconds,
-          geometry: { coordinates: geometry },
-          legs: legs.map((leg) => ({
-            distance: (leg.summary?.length ?? 0) * 1000,
-            duration: leg.summary?.time ?? 0,
-          })),
+          distance: resolvedDistanceKm * 1000,
+          duration: resolvedDurationSeconds,
+          geometry: { coordinates: resolvedGeometry },
+          legs: implausibleWalkingRoute
+            ? [
+                {
+                  distance: resolvedDistanceKm * 1000,
+                  duration: resolvedDurationSeconds,
+                },
+              ]
+            : legs.map((leg) => ({
+                distance: (leg.summary?.length ?? 0) * 1000,
+                duration: leg.summary?.time ?? 0,
+              })),
         },
       ],
     };
@@ -196,7 +228,7 @@ export async function GET(request: Request) {
 
   try {
     const result = await requestRoute(
-      `${profile}:${coordinates}`,
+      `v2:${profile}:${coordinates}`,
       profile,
       locations,
     );
