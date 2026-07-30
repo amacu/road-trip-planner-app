@@ -9,6 +9,7 @@ const supabaseHost = supabaseUrl ? new URL(supabaseUrl).hostname : undefined;
 const connectSrc = [
   "'self'",
   supabaseUrl,
+  supabaseHost ? `wss://${supabaseHost}` : undefined,
   "https://nominatim.openstreetmap.org",
   "https://router.project-osrm.org",
 ].filter(Boolean);

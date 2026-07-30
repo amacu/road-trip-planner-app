@@ -1,48 +1,51 @@
 import type { User } from "@supabase/supabase-js";
 
+import { withDatabaseRetry } from "@/lib/db/retry";
 import { prisma } from "@/lib/prisma";
 
 export async function ensureUserProfile(user: User) {
   const email = user.email?.trim().toLowerCase();
   if (!email) return null;
 
-  const metadata = user.user_metadata ?? {};
-  const fullName =
-    typeof metadata.full_name === "string" ? metadata.full_name.trim() : null;
-  const metadataUsername =
-    typeof metadata.username === "string" ? metadata.username.trim() : null;
-  const existing = await prisma.userProfile.findUnique({
-    where: { userId: user.id },
-    select: { username: true },
-  });
-  const desiredUsername = metadataUsername
-    ? normalizeUsername(metadataUsername)
-    : null;
-  const usernameTaken =
-    desiredUsername && desiredUsername !== existing?.username
-      ? await prisma.userProfile.findUnique({
-          where: { username: desiredUsername },
-          select: { userId: true },
-        })
+  return withDatabaseRetry(async () => {
+    const metadata = user.user_metadata ?? {};
+    const fullName =
+      typeof metadata.full_name === "string" ? metadata.full_name.trim() : null;
+    const metadataUsername =
+      typeof metadata.username === "string" ? metadata.username.trim() : null;
+    const existing = await prisma.userProfile.findUnique({
+      where: { userId: user.id },
+      select: { username: true },
+    });
+    const desiredUsername = metadataUsername
+      ? normalizeUsername(metadataUsername)
       : null;
-  const username =
-    desiredUsername && (!usernameTaken || usernameTaken.userId === user.id)
-      ? desiredUsername
-      : existing?.username;
+    const usernameTaken =
+      desiredUsername && desiredUsername !== existing?.username
+        ? await prisma.userProfile.findUnique({
+            where: { username: desiredUsername },
+            select: { userId: true },
+          })
+        : null;
+    const username =
+      desiredUsername && (!usernameTaken || usernameTaken.userId === user.id)
+        ? desiredUsername
+        : existing?.username;
 
-  return prisma.userProfile.upsert({
-    where: { userId: user.id },
-    update: {
-      email,
-      fullName,
-      username,
-    },
-    create: {
-      userId: user.id,
-      email,
-      fullName,
-      username: username ?? (await makeUniqueUsername(email)),
-    },
+    return prisma.userProfile.upsert({
+      where: { userId: user.id },
+      update: {
+        email,
+        fullName,
+        username,
+      },
+      create: {
+        userId: user.id,
+        email,
+        fullName,
+        username: username ?? (await makeUniqueUsername(email)),
+      },
+    });
   });
 }
 
