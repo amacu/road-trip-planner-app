@@ -27,12 +27,13 @@ export function AppLogo({ compact = false, className = "" }: AppLogoProps) {
 export function LogoMark({ className = "" }: { className?: string }) {
   return (
     <Image
-      src="/logo-box.png"
+      src="/logo-box.png?v=2"
       alt=""
       width={160}
       height={160}
+      unoptimized
       aria-hidden="true"
-      className={className}
+      className={"block shrink-0 object-contain " + className}
     />
   );
 }

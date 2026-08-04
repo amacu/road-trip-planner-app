@@ -5,6 +5,10 @@ import { memo } from "react";
 
 import { formatDistance, formatDuration } from "@/lib/geo";
 import { cn } from "@/lib/utils";
+import {
+  DayWeatherPill,
+  type DayWeatherPoint,
+} from "@/features/trips/components/day-weather-pill";
 
 export const DayListCard = memo(function DayListCard({
   dayId,
@@ -17,6 +21,8 @@ export const DayListCard = memo(function DayListCard({
   firstStopName,
   lastStopName,
   routePointCount = 0,
+  weatherDate,
+  weatherPoints,
   isEmpty = false,
   active,
   onSelect,
@@ -34,6 +40,8 @@ export const DayListCard = memo(function DayListCard({
   firstStopName?: string;
   lastStopName?: string;
   routePointCount?: number;
+  weatherDate: string | null;
+  weatherPoints: DayWeatherPoint[];
   isEmpty?: boolean;
   active: boolean;
   onSelect: (dayId: string) => void;
@@ -65,10 +73,10 @@ export const DayListCard = memo(function DayListCard({
           if (event.key === "Enter" || event.key === " ") onSelect(dayId);
         }}
         className={cn(
-          "relative flex h-[76px] w-[62px] shrink-0 snap-start cursor-pointer flex-col items-center justify-center rounded-[13px] border px-1 py-1.5 text-center shadow-[0_4px_12px_rgba(22,19,13,0.05)] transition-all sm:w-[68px] lg:hidden",
+          "relative flex h-[76px] w-[62px] shrink-0 snap-start cursor-pointer flex-col items-center justify-center rounded-[13px] border px-1 py-1.5 text-center transition-all sm:w-[68px] lg:hidden",
           active
             ? cn(
-                "border-[#16130D] bg-[#16130D] text-[#F3EDE1] shadow-[0_12px_26px_rgba(22,19,13,0.2)]",
+                "border-[#16130D] bg-[#16130D] text-[#F3EDE1]",
                 isEmpty && "border-dashed",
               )
             : isEmpty
@@ -122,7 +130,7 @@ export const DayListCard = memo(function DayListCard({
           if (event.key === "Enter" || event.key === " ") onSelect(dayId);
         }}
         className={cn(
-          "group relative hidden cursor-pointer grid-cols-[16px_45px_minmax(0,1fr)] items-center gap-2.5 rounded-[20px] border px-3 py-3.5 shadow-[0_5px_16px_rgba(22,19,13,0.04)] transition-all duration-200 lg:grid",
+          "group relative hidden cursor-pointer grid-cols-[16px_45px_minmax(0,1fr)] items-center gap-1 rounded-[20px] border py-3.5 pl-1.5 pr-3 shadow-[0_5px_16px_rgba(22,19,13,0.04)] transition-all duration-200 lg:grid",
           active
             ? cn(
                 "border-[#16130D] bg-[#16130D] text-[#F3EDE1] shadow-[0_12px_28px_rgba(22,19,13,0.18)]",
@@ -193,11 +201,16 @@ export const DayListCard = memo(function DayListCard({
           )}
         </div>
 
-        <div className="min-w-0">
-          <div className="flex min-w-0 items-center gap-2">
+        <div className="ml-1.5 min-w-0">
+          <div className="relative flex min-w-0 items-center gap-2">
             <h3 className="shrink-0 text-[15px] font-black leading-tight">
               Day {index + 1}
             </h3>
+            <DayWeatherPill
+              date={weatherDate}
+              points={weatherPoints}
+              active={active}
+            />
             <button
               type="button"
               onClick={(event) => {
@@ -205,7 +218,7 @@ export const DayListCard = memo(function DayListCard({
                 onRemove(dayId);
               }}
               className={cn(
-                "ml-auto grid size-6 shrink-0 place-items-center rounded-[7px] opacity-100 transition-all hover:text-destructive focus:opacity-100 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100",
+                "absolute right-0 grid size-6 shrink-0 place-items-center rounded-[7px] opacity-0 transition-all hover:text-destructive focus:opacity-100 group-hover:opacity-100",
                 active
                   ? "text-[#948B76] hover:bg-white/10"
                   : "text-[#BB6A4F] hover:bg-[#FBE7DD]",

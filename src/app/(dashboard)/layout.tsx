@@ -12,7 +12,7 @@ export default async function DashboardLayout({
   const metadata = user.user_metadata ?? {};
 
   return (
-    <div className="flex h-dvh overflow-hidden bg-background text-foreground">
+    <div className="flex h-dvh flex-col overflow-hidden bg-background text-foreground">
       <CollapsedSidebar
         userFullName={
           typeof metadata.full_name === "string" ? metadata.full_name : null

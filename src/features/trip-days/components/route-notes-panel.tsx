@@ -69,7 +69,7 @@ export function RouteNotesPanel({
 
   if (days.length === 0) {
     return (
-      <div className="grid h-full place-items-center bg-[#F8F5ED] p-8 text-center">
+      <div className="grid h-full place-items-center bg-[#FFFCF6] p-8 text-center">
         <p className="text-sm font-semibold text-[#8A8270]">
           Add a day to start collecting route notes.
         </p>
@@ -80,7 +80,7 @@ export function RouteNotesPanel({
   return (
     <div
       ref={scrollContainerRef}
-      className="h-full overflow-y-auto bg-[#F8F5ED] px-6 pb-28 pt-7 md:px-8"
+      className="h-full overflow-y-auto bg-[#FFFCF6] px-6 pb-28 pt-7 md:px-8"
     >
       <div className="mx-auto max-w-[720px]">
         {days.map((day, dayIndex) => {

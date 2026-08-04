@@ -15,6 +15,23 @@ import {
 
 type CachedRouteMetric = DayRouteMetric & { signature: string };
 
+const MAX_CLIENT_ROUTE_REQUESTS = 2;
+let activeRouteRequests = 0;
+const queuedRouteRequests: Array<() => void> = [];
+
+async function withRouteRequestSlot<T>(request: () => Promise<T>) {
+  if (activeRouteRequests >= MAX_CLIENT_ROUTE_REQUESTS) {
+    await new Promise<void>((resolve) => queuedRouteRequests.push(resolve));
+  }
+  activeRouteRequests += 1;
+  try {
+    return await request();
+  } finally {
+    activeRouteRequests -= 1;
+    queuedRouteRequests.shift()?.();
+  }
+}
+
 function stationaryRoute(stop: { lat: number; lng: number }) {
   return {
     path: [[stop.lat, stop.lng] as [number, number]],
@@ -61,9 +78,11 @@ export function useRouteMetrics(days: TripDayPlain[]) {
           ) {
             return Promise.resolve(stationaryRoute(segment.to));
           }
-          return segment.mode === "walking"
-            ? fetchWalkingRoute(pair, controller.signal)
-            : fetchDrivingRoute(pair, controller.signal);
+          return withRouteRequestSlot(() =>
+            segment.mode === "walking"
+              ? fetchWalkingRoute(pair, controller.signal)
+              : fetchDrivingRoute(pair, controller.signal),
+          );
         }),
       )
         .then((routes) => {

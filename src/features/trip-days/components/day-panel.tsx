@@ -66,6 +66,7 @@ export function DayPanel({
   day,
   index,
   isLastDay = false,
+  plannedDate,
   dateLabel,
   stops,
   legs,
@@ -93,6 +94,7 @@ export function DayPanel({
   day: TripDayPlain;
   index: number;
   isLastDay?: boolean;
+  plannedDate: string | null;
   dateLabel: string | null;
   stops: StopPoint[];
   legs: Array<{
@@ -363,55 +365,8 @@ export function DayPanel({
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-transparent lg:bg-[#FFFAF0]">
-      <div className="fixed right-4 top-[calc(0.75rem+env(safe-area-inset-top))] z-[1200] flex items-center gap-1.5 lg:hidden">
-        <button
-          type="button"
-          onClick={onLaunchNav}
-          disabled={stops.length < 2}
-          className="grid size-10 place-items-center rounded-[12px] bg-[#16130D] text-white shadow-[0_8px_18px_rgba(22,19,13,0.18)] disabled:cursor-not-allowed disabled:opacity-35"
-          title="Start navigation in Google Maps"
-          aria-label="Start navigation in Google Maps"
-        >
-          <Navigation className="size-4" />
-        </button>
-        {copiedItemName && (
-          <button
-            type="button"
-            onClick={pasteCopiedStop}
-            disabled={isPasting}
-            className="grid size-10 place-items-center rounded-[12px] border border-[#E7A58F] bg-[#FBE7DD] text-brand shadow-sm transition-colors hover:bg-[#F8D8CA] disabled:opacity-45"
-            title={`Paste ${copiedItemName}`}
-            aria-label={`Paste ${copiedItemName}`}
-          >
-            {isPasting ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <ClipboardPaste className="size-4" />
-            )}
-          </button>
-        )}
-        <button
-          type="button"
-          onClick={() => setAiImportOpen(true)}
-          className="grid size-10 place-items-center rounded-[12px] border border-[#D8CEB8] bg-[#F8F4EC] text-[#8A5F4D] shadow-sm"
-          title="Import day plan from AI"
-          aria-label="Import day plan from AI"
-        >
-          <Sparkles className="size-4" />
-        </button>
-        <button
-          type="button"
-          onClick={() => setAddingType((value) => value ?? "stop")}
-          className="grid size-10 place-items-center rounded-[12px] bg-brand text-brand-foreground shadow-[0_8px_18px_rgba(228,86,42,0.2)]"
-          title="Add stop or activity"
-          aria-label="Add stop or activity"
-        >
-          <Plus className="size-4" />
-        </button>
-      </div>
-
-      <header className="relative z-10 hidden min-h-[70px] shrink-0 items-center border-b border-[#E4DBC8]/90 bg-[#FBF8F1]/95 px-4 py-3 shadow-[0_10px_24px_-18px_rgba(22,19,13,0.75)] backdrop-blur-md lg:flex">
+    <div className="flex h-full min-h-0 flex-col bg-transparent lg:bg-[#FFFCF6]">
+      <header className="relative z-10 hidden min-h-[70px] shrink-0 items-center border-b border-[#E4DBC8]/80 bg-[#FBF8F1]/90 px-4 py-3 shadow-[0_10px_24px_-20px_rgba(22,19,13,0.65)] backdrop-blur-md lg:flex">
         <div className="flex w-full items-center justify-between gap-3">
           <div className="flex min-w-0 flex-1 items-center gap-3">
             <span className="grid size-9 shrink-0 place-items-center rounded-[12px] bg-brand text-brand-foreground shadow-[0_8px_18px_rgba(228,86,42,0.24)]">
@@ -552,6 +507,7 @@ export function DayPanel({
                     isTripStart={index === 0 && i === 0}
                     isTripFinish={isLastDay && i === stops.length - 1}
                     arrivalTime={schedule[i]?.arrivalTime ?? null}
+                    plannedDate={plannedDate}
                     departureTime={
                       stop.travelMode !== "walking"
                         ? departureAfterWalkingExcursion(i)

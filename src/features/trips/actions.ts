@@ -11,6 +11,7 @@ import {
   createTrip,
   deleteTrip,
   duplicateTrip,
+  getOrCreateTripInviteToken,
   removeTripMember,
   updateTrip,
   updateTripMemberRole,
@@ -202,6 +203,21 @@ export async function addTripMemberAction(
 
   revalidatePath(`/trips/${tripId}`);
   return { success: true, data: undefined };
+}
+
+export async function createTripInviteLinkAction(
+  tripId: string,
+): Promise<ActionResult<string>> {
+  const user = await requireUser();
+  const token = await getOrCreateTripInviteToken(tripId, user.id);
+  if (!token) {
+    return {
+      success: false,
+      error: "Only the trip owner can create an invite link.",
+    };
+  }
+
+  return { success: true, data: `/join/${token}` };
 }
 
 export async function removeTripMemberAction(

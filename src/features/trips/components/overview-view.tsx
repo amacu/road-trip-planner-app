@@ -1,6 +1,20 @@
 "use client";
 
-import { Eye, PenLine, Pencil, Trash2, UserPlus, Users } from "lucide-react";
+import {
+  ArrowRight,
+  BedDouble,
+  CalendarDays,
+  Check,
+  ChevronRight,
+  CircleAlert,
+  Eye,
+  Link2,
+  MapPin,
+  PenLine,
+  Pencil,
+  Trash2,
+  UserPlus,
+} from "lucide-react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useState } from "react";
@@ -19,11 +33,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { LogoMark } from "@/components/shared/app-logo";
+import { AppLogo } from "@/components/shared/app-logo";
 import { FuelOverviewCard } from "@/features/fuel/components/fuel-overview-card";
 import type { FuelPlan } from "@/features/fuel/lib/fuel-plan";
 import {
   addTripMemberAction,
+  createTripInviteLinkAction,
   removeTripMemberAction,
   updateTripMemberRoleAction,
 } from "@/features/trips/actions";
@@ -34,7 +49,12 @@ import type {
   TripStayPlain,
   VehiclePlain,
 } from "@/features/trips/lib/trip-view-model";
-import { buildDayStopColors, formatDistance, formatDuration } from "@/lib/geo";
+import {
+  buildDayStopColors,
+  dayMarkerColor,
+  formatDistance,
+  formatDuration,
+} from "@/lib/geo";
 import {
   TRIP_MEMBER_ROLES,
   type TripMemberRole,
@@ -73,6 +93,7 @@ function stayAsMapStop(stay: TripStayPlain): StopPoint {
 
 export function OverviewView({
   trip,
+  trips,
   days,
   stays,
   currentUserId,
@@ -87,6 +108,7 @@ export function OverviewView({
   onLogoClick,
 }: {
   trip: TripPlain;
+  trips: Array<{ id: string; name: string }>;
   days: TripPlain["days"];
   stays: TripStayPlain[];
   currentUserId: string;
@@ -100,6 +122,7 @@ export function OverviewView({
   onSelectDay: (dayId: string) => void;
   onLogoClick: () => void;
 }) {
+  const router = useRouter();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const allStops = days.flatMap((day) => day.stops);
   const overviewMapStops = days.flatMap((day) => {
@@ -115,25 +138,53 @@ export function OverviewView({
     return dayStops;
   });
   const stopColors = buildDayStopColors(days);
+  days.forEach((day, index) => {
+    const stay = stays.find((item) => item.afterDayId === day.id);
+    if (stay) stopColors[`stay-overview-${stay.id}`] = dayMarkerColor(index);
+  });
   const stopCount = allStops.length;
   const routeStart = overviewMapStops[0]?.name ?? "Start";
   const routeEnd =
     overviewMapStops[overviewMapStops.length - 1]?.name ?? "Finish";
   const dateRange = formatTripDateRange(trip.startDate, days.length);
-  const statCards = [
+  const plannedDays = days.filter((day) => day.stops.length > 0).length;
+  const requiredStays = Math.max(days.length - 1, 0);
+  const plannedStays = Math.min(stays.length, requiredStays);
+  const readinessChecks = [
+    { label: "Travel dates", complete: Boolean(trip.startDate) },
     {
-      label: "Distance",
-      value: formatDistance(tripTotalKm),
-      sub: `${routeStart} -> ${routeEnd}`,
-      color: "#E4562A",
+      label: "Daily route",
+      complete: days.length > 0 && plannedDays === days.length,
     },
+    { label: "Vehicle", complete: Boolean(fuelVehicle) },
     {
-      label: "Drive time",
-      value: formatDuration(tripTotalMin),
-      sub: `across ${days.length} ${days.length === 1 ? "day" : "days"}`,
-      color: "#2E7A57",
+      label: "Overnight stays",
+      complete: requiredStays === 0 || plannedStays >= requiredStays,
     },
+    { label: "Packing list", complete: trip.packingItems.length > 0 },
   ];
+  const completedChecks = readinessChecks.filter(
+    (check) => check.complete,
+  ).length;
+  const readiness = Math.round(
+    (completedChecks / readinessChecks.length) * 100,
+  );
+  const attentionItems = [
+    ...(!trip.startDate ? ["Add travel dates"] : []),
+    ...(days.length === 0
+      ? ["Create the first day of your trip"]
+      : plannedDays < days.length
+        ? [
+            `${days.length - plannedDays} ${days.length - plannedDays === 1 ? "day needs" : "days need"} a route`,
+          ]
+        : []),
+    ...(plannedStays < requiredStays
+      ? [
+          `${requiredStays - plannedStays} ${requiredStays - plannedStays === 1 ? "overnight stay is" : "overnight stays are"} missing`,
+        ]
+      : []),
+    ...(!fuelVehicle ? ["Choose a vehicle for fuel estimates"] : []),
+  ].slice(0, 3);
   const people = [
     {
       id: trip.ownerId,
@@ -148,95 +199,240 @@ export function OverviewView({
   ];
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-[#FFFAF0] lg:grid lg:grid-cols-2">
-      <header className="relative z-20 flex min-h-[calc(76px+env(safe-area-inset-top))] shrink-0 items-center justify-between bg-[#FBF8F1] px-4 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top))] shadow-[0_12px_28px_-22px_rgba(22,19,13,0.75)] lg:hidden">
+    <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-[#EEEAE1] lg:flex-row">
+      <div className="absolute inset-0 hidden lg:block">
+        <MapView
+          stops={overviewMapStops}
+          viewportKey={`overview-${trip.id}`}
+          desktopLeftInset={736}
+          stopColors={stopColors}
+        />
+      </div>
+
+      <header className="relative z-[700] flex min-h-[calc(68px+env(safe-area-inset-top))] shrink-0 items-center gap-3 border-b border-[#E4DBC8] bg-[#FBF8F1]/95 px-4 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top))] shadow-[0_8px_22px_-18px_rgba(22,19,13,0.55)] backdrop-blur-md lg:hidden">
         <button
           type="button"
           onClick={onLogoClick}
-          className="grid size-10 shrink-0 place-items-center rounded-[13px] bg-brand shadow-[0_8px_20px_rgba(228,86,42,0.22)]"
+          className="shrink-0 rounded-[10px]"
           title="Open home"
           aria-label="Open home"
         >
-          <LogoMark className="size-7" />
+          <AppLogo className="[&_img]:!h-9" />
         </button>
-        <div className="ml-2.5 min-w-0 flex-1">
-          <h1 className="truncate text-[18px] font-black leading-tight tracking-[-0.015em]">
-            Overview
-          </h1>
-          <p className="mt-0.5 truncate text-[10px] font-semibold text-[#8A7A68]">
-            {trip.name} · {days.length} {days.length === 1 ? "day" : "days"}
-          </p>
+        <div className="flex min-w-0 flex-1 justify-end">
+          <Select
+            value={trip.id}
+            onValueChange={(tripId) => {
+              if (tripId !== trip.id) router.push(`/trips/${tripId}`);
+            }}
+          >
+            <SelectTrigger
+              aria-label="Switch trip"
+              className="h-10 w-auto max-w-full gap-2 rounded-[12px] border-[#E2D8C6] bg-[#FFFCF6] px-3 text-[12px] font-black text-[#302B23] shadow-sm focus:ring-brand/30 [&>svg]:size-3.5 [&>svg]:shrink-0 [&>svg]:text-[#9A917F]"
+            >
+              <MapPin className="size-3.5 shrink-0 text-brand" />
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent align="center">
+              {trips.map((item) => (
+                <SelectItem key={item.id} value={item.id}>
+                  {item.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
-        <button
-          type="button"
-          onClick={() => setSettingsOpen(true)}
-          className="grid size-10 shrink-0 place-items-center rounded-[12px] border border-[#D8CEB8] bg-[#F8F4EC] text-[#6a6353] shadow-sm"
-          title="Edit trip settings"
-          aria-label="Edit trip settings"
-        >
-          <Pencil className="size-4" />
-        </button>
       </header>
 
-      <div className="relative min-h-0 flex-1 overflow-y-auto p-4 pb-[calc(7.5rem+env(safe-area-inset-bottom))] md:p-10">
-        <button
-          type="button"
-          onClick={() => setSettingsOpen(true)}
-          className="absolute right-5 top-5 hidden size-9 place-items-center rounded-full border border-[#E7DFCE] bg-[#FBF8F1] text-[#6a6353] shadow-sm transition-colors hover:bg-[#FBE7DD] hover:text-[#E4562A] md:right-10 md:top-10 md:grid"
-          title="Edit trip settings"
-        >
-          <Pencil className="size-4" />
-        </button>
+      <section className="relative z-[600] flex min-h-0 w-full flex-1 flex-col overflow-hidden bg-[#FFFCF6] lg:mx-2 lg:my-2.5 lg:w-[720px] lg:flex-none lg:shrink-0 lg:rounded-[24px] lg:border lg:border-[#DED3C0] lg:shadow-[0_18px_42px_rgba(54,43,25,0.11),0_3px_10px_rgba(54,43,25,0.05)]">
+        <div className="relative min-h-0 flex-1 overflow-y-auto p-4 pb-[calc(7.5rem+env(safe-area-inset-bottom))] md:p-7">
+          <button
+            type="button"
+            onClick={() => setSettingsOpen(true)}
+            className="absolute right-5 top-5 hidden size-9 place-items-center rounded-[11px] border border-[#E7DFCE] bg-[#FBF8F1] text-[#6a6353] shadow-sm transition-colors hover:bg-[#FBE7DD] hover:text-[#E4562A] md:grid"
+            title="Edit trip settings"
+          >
+            <Pencil className="size-4" />
+          </button>
 
-        <div className="mb-5 flex items-start justify-between md:mb-[26px]">
-          <div className="min-w-0">
-            <div className="mb-[7px] hidden font-['Hanken_Grotesk'] text-[12.5px] font-bold uppercase tracking-[0.1em] text-[#a89f88] md:block">
-              Trip overview
+          <div
+            className="relative overflow-hidden rounded-[20px] bg-[#16130D] p-5 text-[#FFF9EF] shadow-[0_18px_35px_rgba(22,19,13,0.18)] md:p-6"
+            style={
+              trip.heroImageUrl
+                ? {
+                    backgroundImage: `linear-gradient(90deg, rgba(16, 14, 10, 0.94) 0%, rgba(16, 14, 10, 0.78) 54%, rgba(16, 14, 10, 0.48) 100%), url(${JSON.stringify(trip.heroImageUrl)})`,
+                    backgroundPosition: "center, center",
+                    backgroundRepeat: "no-repeat, no-repeat",
+                    backgroundSize: "cover, cover",
+                  }
+                : undefined
+            }
+          >
+            <button
+              type="button"
+              onClick={() => setSettingsOpen(true)}
+              className="absolute right-3 top-3 z-10 grid size-9 place-items-center rounded-[11px] border border-white/15 bg-black/25 text-[#FFF9EF] shadow-sm backdrop-blur-sm transition-colors hover:bg-black/40 md:hidden"
+              title="Edit trip settings"
+              aria-label="Edit trip settings"
+            >
+              <Pencil className="size-4" />
+            </button>
+            <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.12em] text-[#BDB4A3]">
+              <span className="size-1.5 rounded-sm bg-brand" />
+              Trip command center
             </div>
-            <h1 className="m-0 hidden truncate font-['Bricolage_Grotesque'] text-[40px] font-extrabold leading-none tracking-[-0.03em] text-[#16130D] md:block">
+            <h1 className="mt-3 max-w-[560px] font-['Bricolage_Grotesque'] text-[32px] font-extrabold leading-[0.98] tracking-[-0.035em] md:text-[42px]">
               {trip.name}
             </h1>
-            <div className="mt-3 flex flex-wrap items-center gap-x-3.5 gap-y-2 font-['Hanken_Grotesk'] text-sm font-medium text-[#6a6353]">
-              <span className="inline-flex items-center gap-[7px]">
-                <span className="size-2 rounded-full bg-[#E4562A]" />
+            <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs font-semibold text-[#CFC6B6]">
+              <span className="inline-flex items-center gap-1.5">
+                <MapPin className="size-3.5 text-brand" />
                 {routeStart} → {routeEnd}
               </span>
-              {dateRange && (
-                <>
-                  <span className="text-[#cbc1a9]">·</span>
-                  <span>{dateRange}</span>
-                </>
-              )}
+              <span className="inline-flex items-center gap-1.5">
+                <CalendarDays className="size-3.5 text-[#70B990]" />
+                {dateRange ?? "Dates not set"}
+              </span>
+            </div>
+            <div className="mt-6 grid grid-cols-3 gap-2 border-t border-white/10 pt-5">
+              <HeroMetric
+                label="Distance"
+                value={formatDistance(tripTotalKm)}
+              />
+              <HeroMetric
+                label="Driving"
+                value={formatDuration(tripTotalMin)}
+              />
+              <HeroMetric
+                label="Fuel estimate"
+                value={fuelPlan ? `${Math.round(fuelPlan.totalCost)} PLN` : "—"}
+              />
+            </div>
+            <div className="mt-5 flex items-end justify-between gap-4">
+              <TeamCard
+                trip={trip}
+                currentUserId={currentUserId}
+                people={people}
+              />
+              <button
+                type="button"
+                onClick={() => days[0] && onSelectDay(days[0].id)}
+                disabled={days.length === 0}
+                className="inline-flex h-11 items-center gap-2 rounded-[12px] bg-brand px-4 text-sm font-black text-white shadow-[0_8px_20px_rgba(228,86,42,0.25)] transition hover:bg-[#CF4822] disabled:opacity-45"
+              >
+                Open planner
+                <ArrowRight className="size-4" />
+              </button>
             </div>
           </div>
-        </div>
 
-        <div className="mt-8 grid grid-cols-2 gap-3">
-          {statCards.map((card) => (
-            <StatCard key={card.label} {...card} />
-          ))}
-        </div>
+          <section className="mt-4 rounded-[18px] border border-[#DED3C0] bg-[#FBF8F1] p-5 shadow-sm">
+            <div className="flex items-end justify-between gap-4">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.1em] text-[#9A917F]">
+                  Trip readiness
+                </p>
+                <p className="mt-1 font-['Bricolage_Grotesque'] text-xl font-bold tracking-[-0.02em]">
+                  {readiness === 100
+                    ? "Ready to hit the road"
+                    : "Your plan is taking shape"}
+                </p>
+              </div>
+              <span className="font-mono text-2xl font-black text-[#2E7A57]">
+                {readiness}%
+              </span>
+            </div>
+            <div className="mt-4 h-2.5 overflow-hidden rounded-[4px] bg-[#E8E0CF]">
+              <div
+                className="h-full rounded-[4px] bg-[#2E7A57] transition-[width] duration-500"
+                style={{ width: `${readiness}%` }}
+              />
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {readinessChecks.map((check) => (
+                <span
+                  key={check.label}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-[9px] px-2.5 py-1.5 text-[10px] font-bold",
+                    check.complete
+                      ? "bg-[#E1EFE7] text-[#276848]"
+                      : "bg-[#F0EADB] text-[#8A8270]",
+                  )}
+                >
+                  {check.complete ? (
+                    <Check className="size-3" />
+                  ) : (
+                    <span className="size-1.5 rounded-sm bg-current opacity-50" />
+                  )}
+                  {check.label}
+                </span>
+              ))}
+            </div>
+          </section>
 
-        <div className="mt-4">
-          <FuelOverviewCard plan={fuelPlan} vehicle={fuelVehicle} />
-        </div>
+          {attentionItems.length > 0 && (
+            <section className="mt-4 rounded-[18px] border border-[#E8C6B9] bg-[#FFF3EE] p-4">
+              <div className="flex items-center gap-2 text-sm font-black text-[#A94020]">
+                <CircleAlert className="size-4" />
+                Needs attention
+              </div>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                {attentionItems.map((item) => (
+                  <div
+                    key={item}
+                    className="flex items-center gap-2 rounded-[10px] bg-white/65 px-3 py-2 text-xs font-bold text-[#754E40]"
+                  >
+                    <ChevronRight className="size-3.5 shrink-0 text-brand" />
+                    {item}
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
 
-        <div className="mt-4">
-          <TheRouteCard
-            days={days}
-            stays={stays}
-            stopCount={stopCount}
-            onSelectDay={onSelectDay}
-          />
-        </div>
+          <section className="mt-5">
+            <div className="flex items-end justify-between gap-4">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.1em] text-[#9A917F]">
+                  Itinerary
+                </p>
+                <h2 className="mt-1 font-['Bricolage_Grotesque'] text-[22px] font-bold tracking-[-0.025em]">
+                  Day by day
+                </h2>
+              </div>
+              <span className="text-xs font-bold text-[#8A8270]">
+                {stopCount} places · {stays.length} stays
+              </span>
+            </div>
+            <div className="mt-3 grid gap-2">
+              {days.length > 0 ? (
+                days.map((day, index) => (
+                  <OverviewDayCard
+                    key={day.id}
+                    day={day}
+                    index={index}
+                    color={dayMarkerColor(index)}
+                    tripStartDate={trip.startDate}
+                    stay={stays.find((item) => item.afterDayId === day.id)}
+                    onSelect={() => onSelectDay(day.id)}
+                  />
+                ))
+              ) : (
+                <button
+                  type="button"
+                  disabled
+                  className="rounded-[16px] border border-dashed border-[#D8CEB8] bg-[#FBF8F1]/70 p-6 text-sm font-bold text-[#9A917F]"
+                >
+                  Create a day in Planner to start building the route.
+                </button>
+              )}
+            </div>
+          </section>
 
-        <div className="mt-4">
-          <TeamCard trip={trip} currentUserId={currentUserId} people={people} />
+          <div className="mt-4">
+            <FuelOverviewCard plan={fuelPlan} vehicle={fuelVehicle} />
+          </div>
         </div>
-      </div>
-
-      <section className="relative hidden min-h-[400px] lg:block">
-        <MapView stops={overviewMapStops} stopColors={stopColors} />
       </section>
 
       <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
@@ -257,117 +453,85 @@ export function OverviewView({
   );
 }
 
-function TheRouteCard({
-  days,
-  stays,
-  stopCount,
-  onSelectDay,
+function HeroMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0">
+      <p className="truncate text-[9px] font-black uppercase tracking-[0.08em] text-[#8F887C]">
+        {label}
+      </p>
+      <p className="mt-1 truncate font-mono text-sm font-black text-[#FFF9EF] md:text-base">
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function OverviewDayCard({
+  day,
+  index,
+  color,
+  tripStartDate,
+  stay,
+  onSelect,
 }: {
-  days: TripPlain["days"];
-  stays: TripStayPlain[];
-  stopCount: number;
-  onSelectDay: (dayId: string) => void;
+  day: TripPlain["days"][number];
+  index: number;
+  color: string;
+  tripStartDate: string | null;
+  stay?: TripStayPlain;
+  onSelect: () => void;
 }) {
-  const routeStops = days.flatMap((day, dayIndex) => {
-    const dayLabel = day.name || `Day ${dayIndex + 1}`;
-    const points = day.stops.map((stop) => ({
-      id: stop.id,
-      name: stop.name,
-      region: stopRegion(stop.address),
-      dayLabel,
-      dayId: day.id,
-      isStay: false,
-    }));
-    const stay = stays.find((item) => item.afterDayId === day.id);
-    if (stay && stay.stayType !== "driving_overnight") {
-      points.push({
-        id: `stay-overview-${stay.id}`,
-        name: stay.name,
-        region: stopRegion(stay.address),
-        dayLabel,
-        dayId: day.id,
-        isStay: true,
-      });
-    }
-    return points;
-  });
-  const [expanded, setExpanded] = useState(false);
-  const visibleStops = expanded ? routeStops : routeStops.slice(0, 5);
-  const hiddenStops = Math.max(routeStops.length - visibleStops.length, 0);
+  const routeStops = day.stops.filter((stop) => stop.itemType !== "activity");
+  const first = routeStops[0]?.name;
+  const last = routeStops.at(-1)?.name;
+  const date = day.date ?? overviewDayDate(tripStartDate, index);
 
   return (
-    <div className="rounded-[22px] border border-[#E7DFCE] bg-[#FBF8F1] p-6 shadow-sm">
-      <div className="mb-[22px] flex items-center justify-between">
-        <h2 className="m-0 font-['Bricolage_Grotesque'] text-[19px] font-bold tracking-[-0.02em]">
-          The route
-        </h2>
-        <span className="text-[12.5px] font-semibold text-[#8a8270]">
-          {stopCount} {stopCount === 1 ? "stop" : "stops"} · {days.length}{" "}
-          {days.length === 1 ? "day" : "days"}
+    <button
+      type="button"
+      onClick={onSelect}
+      className="group grid w-full grid-cols-[42px_minmax(0,1fr)_auto] items-center gap-3 rounded-[15px] border border-[#E7DFCE] bg-[#FBF8F1] p-3 text-left shadow-[0_4px_12px_rgba(22,19,13,0.04)] transition hover:-translate-y-px hover:border-[#D5C8AF] hover:shadow-[0_9px_20px_rgba(22,19,13,0.08)]"
+    >
+      <span
+        className="grid size-[42px] place-items-center rounded-[12px] text-center text-white shadow-[0_6px_14px_rgba(22,19,13,0.14)]"
+        style={{ backgroundColor: color }}
+      >
+        <span>
+          <span className="block text-[8px] font-black uppercase tracking-[0.08em] text-white/55">
+            Day
+          </span>
+          <span className="block font-mono text-sm font-black leading-none">
+            {index + 1}
+          </span>
         </span>
-      </div>
-
-      {routeStops.length > 0 ? (
-        <div>
-          {visibleStops.map((stop, index) => {
-            const pin = routePinColor(index);
-            const tag = stop.isStay
-              ? "Night"
-              : routeStopTag(index, routeStops.length);
-            return (
-              <button
-                key={stop.id}
-                type="button"
-                onClick={() => onSelectDay(stop.dayId)}
-                title={`Open ${stop.dayLabel} in the planner`}
-                className="flex w-full gap-4 rounded-xl text-left transition-colors hover:bg-[#fffaf0]"
-              >
-                <div className="flex shrink-0 flex-col items-center">
-                  <div
-                    className="grid size-[30px] place-items-center rounded-full font-mono text-[13px] font-bold text-white"
-                    style={{
-                      background: pin.color,
-                      boxShadow: `0 4px 10px -4px ${pin.color}`,
-                    }}
-                  >
-                    {index + 1}
-                  </div>
-                  <div className="min-h-[26px] w-0.5 flex-1 bg-[repeating-linear-gradient(#d8cfb9_0_4px,transparent_4px_9px)]" />
-                </div>
-                <div className="flex-1 pb-5">
-                  <div className="flex items-center gap-[9px]">
-                    <span className="text-[15.5px] font-bold">{stop.name}</span>
-                    <span
-                      className="rounded-full px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-[0.03em]"
-                      style={{ color: pin.color, background: pin.soft }}
-                    >
-                      {tag}
-                    </span>
-                  </div>
-                  <div className="mt-[3px] text-[12.5px] font-medium text-[#948b76]">
-                    {stop.region} · {stop.dayLabel}
-                  </div>
-                </div>
-              </button>
-            );
-          })}
-
-          {routeStops.length > 5 && (
-            <button
-              type="button"
-              onClick={() => setExpanded((current) => !current)}
-              className="mt-1 w-full rounded-[14px] border border-[#E7DFCE] bg-[#fffaf0] px-4 py-3 text-sm font-bold text-[#E4562A] transition-colors hover:bg-[#FBE7DD]"
-            >
-              {expanded ? "Show less" : `Show more (${hiddenStops})`}
-            </button>
+      </span>
+      <span className="min-w-0">
+        <span className="flex items-center gap-2">
+          <span className="truncate text-sm font-black text-[#302B23]">
+            {day.name ||
+              (first && last ? `${first} → ${last}` : `Day ${index + 1}`)}
+          </span>
+          {date && (
+            <span className="shrink-0 text-[10px] font-bold text-[#9A917F]">
+              {formatCompactDate(date)}
+            </span>
           )}
-        </div>
-      ) : (
-        <p className="text-sm font-medium text-[#948b76]">
-          Add stops in Planner to build the route.
-        </p>
-      )}
-    </div>
+        </span>
+        <span className="mt-1 flex min-w-0 items-center gap-3 text-[10.5px] font-semibold text-[#8A8270]">
+          <span className="inline-flex items-center gap-1">
+            <MapPin className="size-3 text-brand" />
+            {routeStops.length} {routeStops.length === 1 ? "place" : "places"}
+          </span>
+          {stay && (
+            <span className="inline-flex min-w-0 items-center gap-1">
+              <BedDouble className="size-3 shrink-0 text-[#526F7D]" />
+              <span className="truncate">{stay.name}</span>
+            </span>
+          )}
+        </span>
+      </span>
+      <ChevronRight className="size-4 text-[#B3A994] transition-transform group-hover:translate-x-0.5 group-hover:text-brand" />
+    </button>
   );
 }
 
@@ -384,6 +548,7 @@ function TeamCard({
   const [open, setOpen] = useState(false);
   const [memberIdentifier, setMemberIdentifier] = useState("");
   const [isSavingMember, setIsSavingMember] = useState(false);
+  const [isCreatingInvite, setIsCreatingInvite] = useState(false);
   const [removingMemberId, setRemovingMemberId] = useState<string | null>(null);
   const [updatingRoleMemberId, setUpdatingRoleMemberId] = useState<
     string | null
@@ -423,6 +588,35 @@ function TeamCard({
     router.refresh();
   }
 
+  async function shareInviteLink() {
+    setIsCreatingInvite(true);
+    const result = await createTripInviteLinkAction(trip.id);
+    setIsCreatingInvite(false);
+
+    if (!result.success) {
+      toast.error(result.error);
+      return;
+    }
+
+    const inviteUrl = new URL(result.data, window.location.origin).toString();
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `Join ${trip.name}`,
+          text: `Join my trip “${trip.name}”.`,
+          url: inviteUrl,
+        });
+        return;
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError")
+          return;
+      }
+    }
+
+    await navigator.clipboard.writeText(inviteUrl);
+    toast.success("Invite link copied.");
+  }
+
   async function changeMemberRole(memberId: string, role: TripMemberRole) {
     setUpdatingRoleMemberId(memberId);
     const result = await updateTripMemberRoleAction(trip.id, memberId, {
@@ -441,64 +635,45 @@ function TeamCard({
 
   return (
     <>
-      <div className="rounded-[22px] border border-[#E7DFCE] bg-[#FBF8F1] p-5 shadow-sm">
-        <div className="flex items-center justify-between">
-          <h2 className="font-['Bricolage_Grotesque'] text-[19px] font-bold tracking-[-0.02em]">
-            Team
-          </h2>
-          <span className="text-[12.5px] font-semibold text-[#8a8270]">
-            {people.length} {people.length === 1 ? "person" : "people"}
-          </span>
-        </div>
-
-        <div className="mt-4 flex items-center">
-          {people.slice(0, 6).map((person, index) => (
-            <span
-              key={person.id}
-              className={cn(
-                "grid size-10 place-items-center rounded-full border-2 border-[#FBF8F1] text-sm font-black text-white shadow-sm",
-                index > 0 && "-ml-2",
-                index % 3 === 0 && "bg-[#16130D]",
-                index % 3 === 1 && "bg-[#E4562A]",
-                index % 3 === 2 && "bg-[#2E7A57]",
-              )}
-              title={`${person.label} · ${person.detail}`}
-            >
-              {getInitials(person.label)}
-            </span>
-          ))}
-          {people.length > 6 && (
-            <span className="-ml-2 grid size-10 place-items-center rounded-full border-2 border-[#FBF8F1] bg-[#EBE4D3] text-xs font-black text-[#8a8270] shadow-sm">
-              +{people.length - 6}
-            </span>
-          )}
-          <button
-            type="button"
-            onClick={() => setOpen(true)}
-            className="-ml-2 grid size-10 place-items-center rounded-full border-2 border-[#FBF8F1] bg-[#fffaf0] text-[#E4562A] shadow-sm ring-1 ring-[#E7DFCE] hover:bg-[#FBE7DD]"
-            title="Manage team"
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="flex items-center rounded-[12px] p-0.5 transition hover:bg-white/10"
+        title={`Manage team · ${people.length} ${people.length === 1 ? "person" : "people"}`}
+        aria-label="Manage team"
+      >
+        {people.slice(0, 6).map((person, index) => (
+          <span
+            key={person.id}
+            className={cn(
+              "grid size-9 place-items-center rounded-full border-2 border-[#16130D] text-xs font-black text-white shadow-sm",
+              index > 0 && "-ml-2",
+              index % 3 === 0 && "bg-[#6E9BC0]",
+              index % 3 === 1 && "bg-[#E4562A]",
+              index % 3 === 2 && "bg-[#2E7A57]",
+            )}
+            title={`${person.label} · ${person.detail}`}
           >
-            <UserPlus className="size-4" />
-          </button>
-        </div>
-
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          className="mt-4 flex items-center gap-2 text-sm font-black text-[#E4562A] hover:underline"
-        >
-          <Users className="size-4" />
-          Manage team
-        </button>
-      </div>
+            {getInitials(person.label)}
+          </span>
+        ))}
+        {people.length > 6 && (
+          <span className="-ml-2 grid size-9 place-items-center rounded-full border-2 border-[#16130D] bg-[#EBE4D3] text-[10px] font-black text-[#6A6353] shadow-sm">
+            +{people.length - 6}
+          </span>
+        )}
+        <span className="-ml-2 grid size-9 place-items-center rounded-full border-2 border-[#16130D] bg-[#FFF9EF] text-[#E4562A] shadow-sm">
+          <UserPlus className="size-4" />
+        </span>
+      </button>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="max-h-[calc(100dvh-24px)] w-[calc(100vw-24px)] max-w-xl overflow-y-auto rounded-[22px] sm:max-w-xl">
           <DialogHeader>
             <DialogTitle>Team</DialogTitle>
           </DialogHeader>
 
-          <div className="space-y-3">
+          <div className="min-w-0 space-y-3">
             <TeamRow
               name={profileName(trip.ownerProfile) ?? "Trip owner"}
               detail={profileDetail(trip.ownerProfile) ?? trip.ownerId}
@@ -525,22 +700,36 @@ function TeamCard({
           </div>
 
           {canManageMembers && (
-            <form onSubmit={addMember} className="mt-2 flex gap-2">
-              <input
-                value={memberIdentifier}
-                onChange={(event) => setMemberIdentifier(event.target.value)}
-                placeholder="Email or username"
-                className="min-w-0 flex-1 rounded-xl border border-[#E7DFCE] bg-[#fffaf0] px-3 py-2 text-sm font-semibold outline-none ring-[#E4562A]/30 placeholder:text-[#948b76] focus:ring-2"
-              />
-              <button
-                type="submit"
-                disabled={isSavingMember || !memberIdentifier.trim()}
-                className="grid size-10 shrink-0 place-items-center rounded-xl bg-[#E4562A] text-white hover:bg-[#cf4822] disabled:opacity-50"
-                title="Add team member"
+            <div className="mt-2 space-y-2.5 border-t border-[#E7DFCE] pt-4">
+              <form
+                onSubmit={addMember}
+                className="grid grid-cols-[minmax(0,1fr)_40px] gap-2"
               >
-                <UserPlus className="size-4" />
+                <input
+                  value={memberIdentifier}
+                  onChange={(event) => setMemberIdentifier(event.target.value)}
+                  placeholder="Email or username"
+                  className="h-10 min-w-0 rounded-xl border border-[#E7DFCE] bg-[#fffaf0] px-3 text-sm font-semibold outline-none ring-[#E4562A]/30 placeholder:text-[#948b76] focus:ring-2"
+                />
+                <button
+                  type="submit"
+                  disabled={isSavingMember || !memberIdentifier.trim()}
+                  className="grid size-10 place-items-center rounded-xl bg-[#E4562A] text-white hover:bg-[#cf4822] disabled:opacity-50"
+                  title="Add team member"
+                >
+                  <UserPlus className="size-4" />
+                </button>
+              </form>
+              <button
+                type="button"
+                onClick={shareInviteLink}
+                disabled={isCreatingInvite}
+                className="flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-[#D8CEB8] bg-[#FFFCF6] text-xs font-black text-[#4F493E] transition hover:border-brand/40 hover:bg-[#FBE7DD] hover:text-brand disabled:opacity-50"
+              >
+                <Link2 className="size-4" />
+                {isCreatingInvite ? "Creating link..." : "Share invite link"}
               </button>
-            </form>
+            </div>
           )}
         </DialogContent>
       </Dialog>
@@ -571,7 +760,7 @@ function TeamRow({
   const RoleIcon = roleInfo?.icon;
 
   return (
-    <div className="flex items-center justify-between gap-3 rounded-[16px] bg-[#FBF8F1] px-3 py-2.5">
+    <div className="flex min-w-0 flex-col gap-3 rounded-[16px] bg-[#FBF8F1] px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex min-w-0 items-center gap-3">
         <span className="grid size-9 shrink-0 place-items-center rounded-full bg-[#16130D] text-xs font-black text-white">
           {getInitials(name)}
@@ -584,7 +773,7 @@ function TeamRow({
         </div>
       </div>
 
-      <div className="flex shrink-0 items-center gap-2">
+      <div className="flex shrink-0 items-center justify-end gap-2">
         {badge && (
           <span className="rounded-full bg-[#FBE7DD] px-2 py-1 text-[10px] font-black uppercase text-[#E4562A]">
             {badge}
@@ -658,60 +847,6 @@ function TeamRow({
   );
 }
 
-function StatCard({ label, value, sub, color }: StatCardData) {
-  return (
-    <div className="min-w-0 rounded-[18px] border border-[#E7DFCE] bg-[#FBF8F1] px-[17px] py-4 shadow-sm">
-      <div className="mb-3 flex items-center justify-between">
-        <span className="truncate text-[12px] font-semibold text-[#8a8270]">
-          {label}
-        </span>
-        <span
-          className="size-2 shrink-0 rounded-sm"
-          style={{ background: color }}
-        />
-      </div>
-      <div className="truncate font-mono text-[20px] font-bold leading-none tracking-[-0.02em]">
-        {value}
-      </div>
-      <div className="mt-1.5 truncate text-[11.5px] font-medium text-[#a89f88]">
-        {sub}
-      </div>
-    </div>
-  );
-}
-
-type StatCardData = {
-  label: string;
-  value: string;
-  sub: string;
-  color: string;
-};
-
-const ROUTE_PINS = [
-  { color: "#E4562A", soft: "#FBE7DD" },
-  { color: "#2E7A57", soft: "#E1EFE7" },
-  { color: "#6E9BC0", soft: "#E8F0F6" },
-] as const;
-
-function routePinColor(index: number) {
-  return ROUTE_PINS[index % ROUTE_PINS.length];
-}
-
-function routeStopTag(index: number, count: number) {
-  if (index === 0) return "Start";
-  if (index === count - 1) return "End";
-  return "Stop";
-}
-
-function stopRegion(address: string | null) {
-  if (!address) return "Route stop";
-  const parts = address
-    .split(",")
-    .map((part) => part.trim())
-    .filter(Boolean);
-  return parts.at(-2) ?? parts.at(-1) ?? "Route stop";
-}
-
 function profileName(profile: TripPlain["ownerProfile"] | null | undefined) {
   return profile?.fullName || profile?.username || profile?.email || null;
 }
@@ -778,6 +913,21 @@ function formatTripDateRange(startDate: string | null, dayCount: number) {
   const start = new Date(`${startDate}T00:00:00Z`);
   const end = new Date(start.getTime() + (dayCount - 1) * 86_400_000);
   return `${formatTripDate(startDate)} - ${formatTripDate(end.toISOString().slice(0, 10))}`;
+}
+
+function overviewDayDate(startDate: string | null, dayIndex: number) {
+  if (!startDate) return null;
+  const date = new Date(`${startDate}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + dayIndex);
+  return date.toISOString().slice(0, 10);
+}
+
+function formatCompactDate(value: string) {
+  return new Intl.DateTimeFormat("en", {
+    day: "numeric",
+    month: "short",
+    timeZone: "UTC",
+  }).format(new Date(`${value}T00:00:00Z`));
 }
 
 function formatTripDate(value: string | null) {

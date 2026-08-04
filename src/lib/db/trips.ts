@@ -1,4 +1,5 @@
 import { Prisma } from "@prisma/client";
+import { randomUUID } from "crypto";
 
 import { prisma } from "@/lib/prisma";
 import { tripAccessWhere, tripWriteAccessWhere } from "@/lib/db/trip-access";
@@ -341,6 +342,43 @@ export async function addTripMember(
     update: {},
     create: { tripId, userId: memberUserId },
   });
+}
+
+export async function getOrCreateTripInviteToken(
+  tripId: string,
+  ownerId: string,
+) {
+  const trip = await prisma.trip.findFirst({
+    where: { id: tripId, userId: ownerId },
+    select: { id: true, inviteToken: true },
+  });
+  if (!trip) return null;
+  if (trip.inviteToken) return trip.inviteToken;
+
+  const updated = await prisma.trip.update({
+    where: { id: trip.id },
+    data: { inviteToken: randomUUID() },
+    select: { inviteToken: true },
+  });
+  return updated.inviteToken;
+}
+
+export async function joinTripByInviteToken(token: string, userId: string) {
+  const trip = await prisma.trip.findUnique({
+    where: { inviteToken: token },
+    select: { id: true, userId: true },
+  });
+  if (!trip) return null;
+
+  if (trip.userId !== userId) {
+    await prisma.tripMember.upsert({
+      where: { tripId_userId: { tripId: trip.id, userId } },
+      update: {},
+      create: { tripId: trip.id, userId, role: "editor" },
+    });
+  }
+
+  return trip.id;
 }
 
 export async function removeTripMember(

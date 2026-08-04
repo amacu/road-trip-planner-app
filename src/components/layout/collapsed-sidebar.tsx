@@ -1,8 +1,19 @@
 "use client";
 
 import Link from "next/link";
+import {
+  CarFront,
+  Check,
+  ChevronDown,
+  LayoutGrid,
+  MapPinned,
+  Plus,
+  UserRound,
+} from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 
-import { LogoMark } from "@/components/shared/app-logo";
+import { AppLogo } from "@/components/shared/app-logo";
+import { NewTripDialog } from "@/features/trips/components/new-trip-dialog";
 import { cn } from "@/lib/utils";
 
 export type SidebarTripItem = {
@@ -24,8 +35,6 @@ type CollapsedSidebarProps = {
 };
 
 export function CollapsedSidebar({
-  userFullName,
-  userEmail,
   userAvatarUrl,
   onLogoClick,
   onProfileClick,
@@ -33,14 +42,37 @@ export function CollapsedSidebar({
   activeTripId,
   onSelectTrip,
 }: CollapsedSidebarProps) {
+  const [creating, setCreating] = useState(false);
+  const [tripMenuOpen, setTripMenuOpen] = useState(false);
+  const tripMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!tripMenuOpen) return;
+
+    const closeOnOutsideClick = (event: PointerEvent) => {
+      if (!tripMenuRef.current?.contains(event.target as Node)) {
+        setTripMenuOpen(false);
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setTripMenuOpen(false);
+    };
+
+    document.addEventListener("pointerdown", closeOnOutsideClick);
+    document.addEventListener("keydown", closeOnEscape);
+
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsideClick);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [tripMenuOpen]);
+
   const logo = (
-    <span className="grid size-11 place-items-center rounded-[14px] bg-brand shadow-[0_10px_24px_rgba(228,86,42,0.26)] transition-transform hover:-translate-y-px">
-      <LogoMark className="size-8" />
-    </span>
+    <AppLogo className="transition-transform hover:-translate-y-px [&_img]:!h-10" />
   );
 
   const profile = (
-    <span className="grid size-11 place-items-center overflow-hidden rounded-full bg-[#16130D] text-sm font-black text-[#F3EDE1] shadow-[0_10px_24px_rgba(22,19,13,0.20)] ring-1 ring-[#E4DBC8] transition-transform hover:-translate-y-px">
+    <span className="grid size-10 place-items-center overflow-hidden rounded-[12px] bg-brand text-brand-foreground shadow-[0_7px_18px_rgba(228,86,42,0.24)] ring-1 ring-[#D94E25] transition-all hover:-translate-y-px hover:bg-[#CF4822]">
       {userAvatarUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
@@ -49,84 +81,115 @@ export function CollapsedSidebar({
           className="h-full w-full object-cover"
         />
       ) : (
-        getUserInitials(userFullName, userEmail)
+        <UserRound className="size-[18px]" strokeWidth={2.2} />
       )}
     </span>
   );
+  const activeTrip = trips?.find((trip) => trip.id === activeTripId);
 
   return (
-    <aside className="z-[1000] hidden h-full w-[68px] shrink-0 border-r border-[#E4DBC8] bg-[#FBF8F1] px-3 py-4 md:flex md:flex-col md:items-center">
+    <aside className="relative z-[1000] hidden h-[68px] w-full shrink-0 items-center border-b border-[#E4DBC8] bg-[#FBF8F1] px-5 py-3 shadow-[0_8px_22px_-18px_rgba(22,19,13,0.55)] md:flex">
       {onLogoClick ? (
         <button
           type="button"
           onClick={onLogoClick}
-          className="shrink-0 rounded-[16px]"
+          className="shrink-0 rounded-[10px]"
           aria-label="Open home"
-          title="Milepost"
+          title="Tripzo"
         >
           {logo}
         </button>
       ) : (
         <Link
           href="/"
-          className="shrink-0 rounded-[16px]"
+          className="shrink-0 rounded-[10px]"
           aria-label="Open home"
-          title="Milepost"
+          title="Tripzo"
         >
           {logo}
         </Link>
       )}
 
       {trips && (
-        <>
-          <div className="my-3 h-px w-8 shrink-0 bg-[#E4DBC8]" />
-          <nav className="flex min-h-0 flex-1 flex-col items-center gap-2 overflow-x-hidden overflow-y-auto py-0.5">
-            {trips.map((trip) => (
-              <Link
-                key={trip.id}
-                href={`/trips/${trip.id}`}
-                prefetch={false}
-                onClick={() => onSelectTrip?.(trip.id)}
-                title={trip.name}
-                aria-label={trip.name}
-                aria-current={trip.id === activeTripId ? "true" : undefined}
+        <div className="absolute left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-[14px] border border-[#E2D8C6] bg-[#EEE7DA]/80 p-1 shadow-[0_4px_14px_rgba(22,19,13,0.06)]">
+          <ComingSoonMenuItem icon={LayoutGrid} label="All trips" />
+          <ComingSoonMenuItem icon={CarFront} label="Vehicles" />
+          <div ref={tripMenuRef} className="relative">
+            <button
+              type="button"
+              onClick={() => setTripMenuOpen((open) => !open)}
+              aria-expanded={tripMenuOpen}
+              aria-haspopup="menu"
+              aria-controls="trip-switcher-menu"
+              className="flex h-9 max-w-[min(34vw,320px)] items-center gap-2 rounded-[10px] bg-[#FFFCF6] px-3 text-[11px] font-black text-[#302B23] shadow-sm outline-none transition-all hover:bg-white focus-visible:ring-2 focus-visible:ring-brand/40"
+            >
+              <MapPinned className="size-3.5 shrink-0 text-[#C94B25]" />
+              <span className="truncate">{activeTrip?.name ?? "Trips"}</span>
+              <ChevronDown
                 className={cn(
-                  "group relative grid size-11 shrink-0 place-items-center overflow-hidden rounded-[14px] bg-[#EBE4D3] shadow-sm transition-all hover:-translate-y-px",
+                  "size-3.5 shrink-0 text-[#9A917F] transition-transform duration-200",
+                  tripMenuOpen && "rotate-180",
                 )}
+              />
+            </button>
+            {tripMenuOpen && (
+              <nav
+                id="trip-switcher-menu"
+                aria-label="Switch trip"
+                className="absolute left-0 top-[calc(100%+10px)] w-[min(340px,calc(100vw-32px))] overflow-hidden rounded-[18px] border border-[#DED3C0] bg-[#FFFCF6] p-2.5 shadow-[0_22px_55px_-10px_rgba(22,19,13,0.28)]"
               >
-                {trip.heroImageUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={trip.heroImageUrl}
-                    alt=""
-                    className="h-full w-full object-cover"
-                  />
-                ) : (
-                  <span className="text-xs font-black text-[#8a8270]">
-                    {getTripInitials(trip.name)}
-                  </span>
-                )}
-                <span
-                  aria-hidden
-                  className={cn(
-                    "pointer-events-none absolute inset-0 rounded-[14px] ring-2 ring-inset",
-                    trip.id === activeTripId
-                      ? "ring-brand"
-                      : "ring-transparent group-hover:ring-[#D8CEB8]",
-                  )}
-                />
-              </Link>
-            ))}
-          </nav>
-        </>
+                <div className="max-h-[min(55vh,340px)] space-y-1 overflow-y-auto overscroll-contain">
+                  {trips.map((trip) => (
+                    <Link
+                      key={trip.id}
+                      href={`/trips/${trip.id}`}
+                      prefetch={false}
+                      onClick={() => {
+                        onSelectTrip?.(trip.id);
+                        setTripMenuOpen(false);
+                      }}
+                      title={trip.name}
+                      aria-current={
+                        trip.id === activeTripId ? "page" : undefined
+                      }
+                      className={cn(
+                        "flex min-w-0 items-center gap-2.5 rounded-[12px] px-3 py-3 text-[11px] font-bold outline-none transition-all focus-visible:ring-2 focus-visible:ring-brand/35",
+                        trip.id === activeTripId
+                          ? "bg-[#FBE7DD] text-[#A93D1D]"
+                          : "text-[#71695C] hover:bg-[#F3EDE2] hover:text-[#302B23]",
+                      )}
+                    >
+                      <MapPinned className="size-4 shrink-0 opacity-65" />
+                      <span className="truncate">{trip.name}</span>
+                      {trip.id === activeTripId && (
+                        <Check
+                          className="ml-auto size-4 shrink-0"
+                          strokeWidth={2.5}
+                        />
+                      )}
+                    </Link>
+                  ))}
+                </div>
+              </nav>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => setCreating(true)}
+            className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-[10px] bg-brand px-3 text-[10.5px] font-black text-brand-foreground shadow-[0_5px_14px_rgba(228,86,42,0.2)] transition-colors hover:bg-[#CF4822]"
+          >
+            <Plus className="size-3.5" />
+            New trip
+          </button>
+        </div>
       )}
 
-      <div className={cn("shrink-0", trips ? "mt-3" : "mt-auto")}>
+      <div className="absolute right-5 shrink-0">
         {onProfileClick ? (
           <button
             type="button"
             onClick={onProfileClick}
-            className="rounded-full"
+            className="rounded-[12px]"
             aria-label="Open profile"
             title="Profile"
           >
@@ -135,7 +198,7 @@ export function CollapsedSidebar({
         ) : (
           <Link
             href="/profile"
-            className="rounded-full"
+            className="rounded-[12px]"
             aria-label="Open profile"
             title="Profile"
           >
@@ -143,21 +206,27 @@ export function CollapsedSidebar({
           </Link>
         )}
       </div>
+      <NewTripDialog open={creating} onOpenChange={setCreating} />
     </aside>
   );
 }
 
-function getUserInitials(fullName?: string | null, email?: string | null) {
-  const value = (fullName || email || "User").trim();
-  const parts = value.split(/\s+/).filter(Boolean);
-  const first = parts[0]?.[0] ?? "U";
-  const second = parts.length > 1 ? parts[1]?.[0] : parts[0]?.[1];
-  return `${first}${second ?? ""}`.toUpperCase();
-}
-
-function getTripInitials(name: string) {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  const first = parts[0]?.[0] ?? "?";
-  const second = parts.length > 1 ? parts[1]?.[0] : parts[0]?.[1];
-  return `${first}${second ?? ""}`.toUpperCase();
+function ComingSoonMenuItem({
+  icon: Icon,
+  label,
+}: {
+  icon: typeof LayoutGrid;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      aria-disabled="true"
+      title={`${label} · Coming soon`}
+      className="inline-flex h-9 shrink-0 cursor-default items-center gap-1.5 rounded-[10px] px-2.5 text-[10.5px] font-bold text-[#71695C] transition-colors hover:bg-[#E5DDCF] hover:text-[#302B23]"
+    >
+      <Icon className="size-3.5 text-[#9A765F]" />
+      {label}
+    </button>
+  );
 }

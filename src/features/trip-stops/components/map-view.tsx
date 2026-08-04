@@ -85,6 +85,8 @@ type Props = {
   showPois?: boolean;
   /** Called when a user clicks a POI marker's "add" action — lets callers add it as a stop. */
   onAddPoi?: (poi: PoiResult) => void;
+  /** Desktop-only width occupied by panels overlaying the map from the left. Camera fitting uses only the unobscured workspace. */
+  desktopLeftInset?: number;
 };
 
 export function MapView({
@@ -98,6 +100,7 @@ export function MapView({
   activityPins,
   showPois,
   onAddPoi,
+  desktopLeftInset = 0,
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<LeafletMap | null>(null);
@@ -123,6 +126,7 @@ export function MapView({
   const activityPinsRef = useRef(activityPins);
   const showPoisRef = useRef(showPois);
   const viewportKeyRef = useRef(viewportKey);
+  const desktopLeftInsetRef = useRef(desktopLeftInset);
   // Tracks the activeStopId that was in effect the last time we moved the
   // viewport, so we only re-fit/refocus when the *selection* changes — not
   // on every unrelated re-render (e.g. a stop's name being edited).
@@ -155,6 +159,7 @@ export function MapView({
     markerLabelsRef.current = markerLabels;
     excludeFromRouteIdsRef.current = excludeFromRouteIds;
     activityPinsRef.current = activityPins;
+    desktopLeftInsetRef.current = desktopLeftInset;
   }, [
     stops,
     showRoute,
@@ -164,7 +169,21 @@ export function MapView({
     markerLabels,
     excludeFromRouteIds,
     activityPins,
+    desktopLeftInset,
   ]);
+
+  function visibleLeftInset() {
+    return typeof window !== "undefined" &&
+      window.matchMedia("(min-width: 1024px)").matches
+      ? desktopLeftInsetRef.current
+      : 0;
+  }
+
+  function centerPointInVisibleWorkspace() {
+    const map = mapRef.current;
+    const inset = visibleLeftInset();
+    if (map && inset > 0) map.panBy([-inset / 2, 0], { animate: false });
+  }
 
   function drawMarkersAndRoute() {
     const L = LRef.current;
@@ -282,28 +301,33 @@ export function MapView({
     hasFittedOnceRef.current = true;
 
     if (shouldFit && activeStop) {
+      const leftInset = visibleLeftInset();
       const focusPoints: Array<[number, number]> = [
         [activeStop.lat, activeStop.lng],
         ...currentActivityPins.map((p) => [p.lat, p.lng] as [number, number]),
       ];
       if (focusPoints.length > 1) {
         map.fitBounds(L.latLngBounds(focusPoints), {
-          padding: [80, 80],
+          paddingTopLeft: [leftInset + 64, 80],
+          paddingBottomRight: [64, 80],
           maxZoom: 16,
         });
       } else {
         map.setView([activeStop.lat, activeStop.lng], 15, { animate: false });
+        centerPointInVisibleWorkspace();
       }
     } else if (shouldFit && currentStops.length === 1) {
       map.setView([currentStops[0].lat, currentStops[0].lng], 14, {
         animate: false,
       });
+      centerPointInVisibleWorkspace();
     } else if (shouldFit && currentStops.length > 1) {
+      const leftInset = visibleLeftInset();
       const bounds = L.latLngBounds(
         currentStops.map((s) => [s.lat, s.lng] as [number, number]),
       );
       map.fitBounds(bounds, {
-        paddingTopLeft: [56, 92],
+        paddingTopLeft: [leftInset + 56, 92],
         paddingBottomRight: [56, 112],
         maxZoom: 14,
         animate: true,
@@ -590,6 +614,9 @@ export function MapView({
 
   useEffect(() => {
     drawMarkersAndRoute();
+    // Camera and marker inputs are mirrored into refs above; rebuilding this
+    // callback on every render would restart route drawing unnecessarily.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     stops,
     showRoute,
@@ -599,6 +626,7 @@ export function MapView({
     markerLabels,
     excludeFromRouteIds,
     activityPins,
+    desktopLeftInset,
   ]);
 
   return (

@@ -17,6 +17,7 @@ import { useEffect, useRef, useState } from "react";
 
 import type { StopPoint } from "@/features/trips/lib/trip-view-model";
 import { AddStopBox } from "@/features/trip-stops/components/add-stop-box";
+import { StopWeatherBox } from "@/features/trip-stops/components/stop-weather-box";
 import { cn } from "@/lib/utils";
 
 function minutesToHHMM(min: number | null | undefined): string {
@@ -46,6 +47,7 @@ export function StopCard({
   isTripFinish = false,
   arrivalTime = null,
   departureTime = null,
+  plannedDate = null,
   dayStartTime = "",
   onSetDayStartTime,
   showSchedule = true,
@@ -74,6 +76,7 @@ export function StopCard({
   isTripFinish?: boolean;
   arrivalTime?: string | null;
   departureTime?: string | null;
+  plannedDate?: string | null;
   dayStartTime?: string;
   onSetDayStartTime?: (startTime: string) => void;
   /** Hides the arrival/departure time badge when the schedule is unavailable. */
@@ -513,6 +516,16 @@ export function StopCard({
                 </div>
               )}
             </div>
+
+            {!isActivity && stop.hasLocation && plannedDate && (
+              <StopWeatherBox
+                lat={stop.lat}
+                lng={stop.lng}
+                date={plannedDate}
+                time={arrivalTime || dayStartTime || "12:00"}
+                endTime={departureTime}
+              />
+            )}
 
             <div className="mt-2.5 flex flex-wrap items-center gap-2">
               <div className="flex rounded-[10px] border border-[#DED3C0]/80 bg-white/20 p-0.5 font-sans">

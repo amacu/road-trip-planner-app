@@ -1,9 +1,6 @@
 "use client";
 
 import {
-  Calendar,
-  Check,
-  ChevronDown,
   Compass,
   LayoutDashboard,
   Map as MapIcon,
@@ -14,7 +11,6 @@ import {
   Sparkles,
 } from "lucide-react";
 import dynamic from "next/dynamic";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   startTransition,
@@ -29,7 +25,14 @@ import { flushSync } from "react-dom";
 import { toast } from "sonner";
 
 import { CollapsedSidebar } from "@/components/layout/collapsed-sidebar";
-import { LogoMark } from "@/components/shared/app-logo";
+import { AppLogo } from "@/components/shared/app-logo";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   createTripPackingItemAction,
   deleteTripPackingItemAction,
@@ -64,9 +67,9 @@ import {
 } from "@/features/trip-stops/actions";
 import { DayListCard } from "@/features/trips/components/day-list-card";
 import type { AiTripDay } from "@/features/trips/components/ai-trip-import-dialog";
-import { NewTripDialog } from "@/features/trips/components/new-trip-dialog";
 import { TripSummaryCard } from "@/features/trips/components/trip-summary-card";
 import { deleteTripAction, updateTripAction } from "@/features/trips/actions";
+import { addMinutesToTime } from "@/lib/geo";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import type {
   StopPoint,
@@ -184,6 +187,39 @@ function formatWeekdayLabel(date: string | null) {
   })
     .format(new Date(`${date}T00:00:00Z`))
     .toUpperCase();
+}
+
+function getDayWeatherPoints(
+  day: TripPlain["days"][number],
+  routeStops: StopPoint[],
+  legs: Array<{ durationMin: number; returnDurationMin?: number }>,
+) {
+  let cursor = day.startTime || "12:00";
+  const arrivalByStopId = new Map<string, string>();
+
+  routeStops.forEach((stop, index) => {
+    arrivalByStopId.set(stop.id, stop.startTime || cursor);
+    const leg = legs[index];
+    cursor = addMinutesToTime(
+      cursor,
+      (stop.visitDurationMin ?? 0) +
+        (leg?.durationMin ?? 0) +
+        (leg?.returnDurationMin ?? 0),
+    );
+  });
+
+  return day.stops
+    .filter((stop) => stop.itemType === "stop" && stop.hasLocation)
+    .slice(0, 20)
+    .map((stop) => ({
+      lat: stop.lat,
+      lng: stop.lng,
+      time:
+        stop.startTime ||
+        arrivalByStopId.get(stop.id) ||
+        day.startTime ||
+        "12:00",
+    }));
 }
 
 function stayAsStop(stay: TripStayPlain, id: string): StopPoint {
@@ -1975,7 +2011,7 @@ export function PlannerView({
   }
 
   return (
-    <div className="flex h-dvh w-full max-w-full overflow-x-hidden bg-[#EEE8DC] text-foreground">
+    <div className="flex h-dvh w-full max-w-full flex-col overflow-x-hidden bg-[#EEE8DC] text-foreground">
       {tab !== "landing" && (
         <div
           aria-hidden
@@ -2008,6 +2044,7 @@ export function PlannerView({
         {tab === "overview" && (
           <OverviewView
             trip={trip}
+            trips={trips}
             days={days}
             stays={stays}
             currentUserId={currentUserId}
@@ -2031,32 +2068,57 @@ export function PlannerView({
                 : "lg:grid-cols-[280px_minmax(420px,460px)_1fr]"
             }`}
           >
-            <div className="relative z-20 flex min-h-0 min-w-0 max-w-full flex-col overflow-hidden border-[#E4DBC8] bg-[#FBF8F1] shadow-[0_12px_28px_-22px_rgba(22,19,13,0.75)] lg:z-auto lg:border-r lg:shadow-none">
-              <header className="relative z-10 flex min-h-[calc(76px+env(safe-area-inset-top))] shrink-0 items-center justify-between gap-3 bg-transparent pb-2.5 pl-4 pr-[156px] pt-[calc(0.875rem+env(safe-area-inset-top))] lg:min-h-[70px] lg:border-b lg:border-[#E4DBC8]/90 lg:bg-[#FBF8F1]/95 lg:px-3.5 lg:py-3 lg:shadow-[0_10px_24px_-18px_rgba(22,19,13,0.75)] lg:backdrop-blur-md">
-                <div className="flex min-w-0 items-center gap-2.5">
-                  <button
-                    type="button"
-                    onClick={() => setTab("landing")}
-                    className="grid size-10 shrink-0 place-items-center rounded-[13px] bg-brand shadow-[0_8px_20px_rgba(228,86,42,0.22)] lg:hidden"
-                    title="Open home"
-                    aria-label="Open home"
+            <div className="relative z-20 flex min-h-0 min-w-0 max-w-full flex-col overflow-hidden bg-inherit lg:col-start-1 lg:row-start-1 lg:z-[600] lg:mx-2 lg:my-2.5 lg:h-auto lg:self-stretch lg:rounded-[24px] lg:border lg:border-[#DED3C0] lg:bg-[#FFFCF6] lg:shadow-[0_18px_42px_rgba(54,43,25,0.11),0_3px_10px_rgba(54,43,25,0.05)]">
+              <header className="relative z-20 flex min-h-[calc(68px+env(safe-area-inset-top))] shrink-0 items-center gap-3 border-b border-[#E4DBC8] bg-[#FBF8F1]/95 px-3 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top))] backdrop-blur-md lg:hidden">
+                <button
+                  type="button"
+                  onClick={() => setTab("landing")}
+                  className="shrink-0 rounded-[10px]"
+                  title="Open home"
+                  aria-label="Open home"
+                >
+                  <AppLogo className="[&_img]:!h-9" />
+                </button>
+                <div className="flex min-w-0 flex-1 justify-end">
+                  <Select
+                    value={trip.id}
+                    onValueChange={(tripId) => {
+                      if (tripId !== trip.id) router.push(`/trips/${tripId}`);
+                    }}
                   >
-                    <LogoMark className="size-7" />
-                  </button>
-                  <span className="hidden size-9 shrink-0 place-items-center rounded-[12px] bg-brand text-brand-foreground shadow-[0_8px_18px_rgba(228,86,42,0.24)] lg:grid">
+                    <SelectTrigger
+                      aria-label="Switch trip"
+                      className="h-10 w-auto max-w-full gap-2 rounded-[12px] border-[#E2D8C6] bg-[#FFFCF6] px-3 text-[12px] font-black text-[#302B23] focus:ring-brand/30 [&>svg]:size-3.5 [&>svg]:shrink-0 [&>svg]:text-[#9A917F]"
+                    >
+                      <MapPinned className="size-3.5 shrink-0 text-brand" />
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent align="center">
+                      {trips.map((item) => (
+                        <SelectItem key={item.id} value={item.id}>
+                          {item.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </header>
+
+              <header className="relative z-10 hidden min-h-[70px] shrink-0 items-center justify-between gap-3 border-b border-[#E4DBC8]/90 bg-[#FBF8F1]/95 px-3.5 py-3 shadow-[0_10px_24px_-18px_rgba(22,19,13,0.75)] backdrop-blur-md lg:flex">
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <span className="grid size-9 shrink-0 place-items-center rounded-[12px] bg-brand text-brand-foreground shadow-[0_8px_18px_rgba(228,86,42,0.24)]">
                     <MapPinned className="size-[18px]" />
                   </span>
                   <div className="min-w-0">
-                    <h2 className="truncate text-[18px] font-black leading-tight tracking-[-0.015em] text-foreground lg:text-[15px] lg:tracking-normal">
+                    <h2 className="truncate text-[15px] font-black leading-tight text-foreground">
                       Planner
                     </h2>
-                    <p className="mt-0.5 truncate text-[10px] font-semibold text-[#8A7A68] lg:text-[10px] lg:font-bold lg:uppercase lg:tracking-[0.1em] lg:text-muted-foreground">
-                      <span className="lg:hidden">{trip.name} · </span>
+                    <p className="mt-0.5 truncate text-[10px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
                       {days.length} {days.length === 1 ? "day" : "days"}
                     </p>
                   </div>
                 </div>
-                <div className="hidden items-center gap-1.5 lg:flex">
+                <div className="flex items-center gap-1.5">
                   <button
                     type="button"
                     onClick={() => setTripAiOpen(true)}
@@ -2078,7 +2140,7 @@ export function PlannerView({
                   </button>
                 </div>
               </header>
-              <div className="order-1 mx-4 grid shrink-0 grid-cols-3 rounded-[12px] border border-white/50 bg-[#E9E2D5]/90 p-1 shadow-sm backdrop-blur lg:hidden">
+              <div className="order-1 mx-3 mt-3 grid shrink-0 grid-cols-3 rounded-[12px] border border-white/50 bg-[#E9E2D5]/90 p-1 backdrop-blur lg:hidden">
                 {(
                   [
                     ["itinerary", "Itinerary", RouteIcon],
@@ -2096,7 +2158,7 @@ export function PlannerView({
                     className={cn(
                       "inline-flex h-8 items-center justify-center gap-1.5 rounded-[9px] px-3 text-[11px] font-bold transition-all",
                       mobilePlannerPane === pane
-                        ? "bg-white text-[#16130D] shadow-sm"
+                        ? "bg-white text-[#16130D]"
                         : "text-[#8A8270]",
                     )}
                   >
@@ -2105,7 +2167,7 @@ export function PlannerView({
                   </button>
                 ))}
               </div>
-              <div className="order-2 flex min-h-0 flex-none snap-x snap-mandatory scroll-px-4 gap-2 overflow-x-auto px-4 pb-4 pt-3 lg:order-none lg:block lg:flex-1 lg:snap-none lg:space-y-2 lg:overflow-x-hidden lg:overflow-y-auto lg:px-3 lg:pb-3 lg:pt-3.5">
+              <div className="order-2 flex min-h-0 flex-none snap-x snap-mandatory scroll-px-3 gap-2 overflow-x-auto px-3 pb-3 pt-2 lg:order-none lg:block lg:flex-1 lg:snap-none lg:space-y-2 lg:overflow-x-hidden lg:overflow-y-auto lg:px-3 lg:pb-3 lg:pt-3.5">
                 {days.length === 0 ? (
                   <p className="p-4 text-center text-sm text-muted-foreground">
                     No days yet.
@@ -2134,6 +2196,12 @@ export function PlannerView({
                         firstStopName={routeStops[0]?.name}
                         lastStopName={routeStops[routeStops.length - 1]?.name}
                         routePointCount={routeStops.length}
+                        weatherDate={dayDate}
+                        weatherPoints={getDayWeatherPoints(
+                          day,
+                          routeStops,
+                          metric?.legs ?? [],
+                        )}
                         isEmpty={
                           stops.length === 0 &&
                           !stays.some((stay) => stay.afterDayId === day.id)
@@ -2150,7 +2218,7 @@ export function PlannerView({
                 <button
                   type="button"
                   onClick={() => setTripAiOpen(true)}
-                  className="flex h-[76px] w-[62px] shrink-0 snap-start flex-col items-center justify-center rounded-[13px] border border-[#DED3C0] bg-[#FAF6EE] px-1 text-center text-[#8A5F4D] shadow-[0_4px_12px_rgba(22,19,13,0.05)] sm:w-[68px] lg:hidden"
+                  className="flex h-[76px] w-[62px] shrink-0 snap-start flex-col items-center justify-center rounded-[13px] border border-[#DED3C0] bg-[#FAF6EE] px-1 text-center text-[#8A5F4D] sm:w-[68px] lg:hidden"
                   title="Open AI trip planner"
                   aria-label="Open AI trip planner"
                 >
@@ -2165,7 +2233,7 @@ export function PlannerView({
                   type="button"
                   onClick={addDay}
                   disabled={isAddingDay || isImportingTrip}
-                  className="flex h-[76px] w-[62px] shrink-0 snap-start flex-col items-center justify-center rounded-[13px] border border-[#E7A58F] bg-[#FBE7DD] px-1 text-center text-brand shadow-[0_4px_12px_rgba(228,86,42,0.08)] disabled:opacity-45 sm:w-[68px] lg:hidden"
+                  className="flex h-[76px] w-[62px] shrink-0 snap-start flex-col items-center justify-center rounded-[13px] border border-[#E7A58F] bg-[#FBE7DD] px-1 text-center text-brand disabled:opacity-45 sm:w-[68px] lg:hidden"
                   title="Add day"
                   aria-label="Add day"
                 >
@@ -2192,7 +2260,7 @@ export function PlannerView({
             {!showAllDays && (
               <main
                 className={cn(
-                  "h-full min-h-0 min-w-0 max-w-full flex-1 overflow-hidden bg-transparent lg:block lg:border-r lg:border-[#E4DBC8] lg:bg-[#FFFAF0]",
+                  "h-full min-h-0 min-w-0 max-w-full flex-1 overflow-hidden bg-transparent lg:col-start-2 lg:row-start-1 lg:z-[600] lg:mx-2 lg:my-2.5 lg:block lg:h-auto lg:self-stretch lg:rounded-[24px] lg:border lg:border-[#DED3C0] lg:bg-[#FFFCF6] lg:shadow-[0_18px_42px_rgba(54,43,25,0.11),0_3px_10px_rgba(54,43,25,0.05)]",
                   mobilePlannerPane === "itinerary" ? "block" : "hidden",
                 )}
               >
@@ -2202,6 +2270,7 @@ export function PlannerView({
                     day={currentDay}
                     index={currentDayIndex}
                     isLastDay={currentDayIndex === days.length - 1}
+                    plannedDate={getDayDate(currentDayIndex, trip.startDate)}
                     dateLabel={formatDayDateLabel(
                       getDayDate(currentDayIndex, trip.startDate),
                     )}
@@ -2277,14 +2346,29 @@ export function PlannerView({
 
             <section
               className={cn(
-                "relative min-h-0 min-w-0 max-w-full flex-1 flex-col overflow-hidden lg:min-h-[400px] lg:flex",
+                "relative min-h-0 min-w-0 max-w-full flex-1 flex-col overflow-hidden lg:z-0 lg:min-h-[400px] lg:flex",
+                !showAllDays &&
+                  rightPanelMode === "map" &&
+                  "lg:col-start-1 lg:col-end-4 lg:row-start-1",
+                showAllDays && "lg:col-start-1 lg:col-end-3 lg:row-start-1",
                 mobilePlannerPane !== "itinerary" || showAllDays
                   ? "flex"
                   : "hidden",
-                rightPanelMode === "notes" ? "bg-[#F8F5ED]" : "bg-[#EEEAE1]",
+                rightPanelMode === "notes" ? "bg-[#FFFCF6]" : "bg-[#EEEAE1]",
               )}
             >
-              <div className="absolute left-1/2 top-3 z-[500] hidden -translate-x-1/2 grid-cols-2 rounded-[12px] border border-white/50 bg-[#E9E2D5]/90 p-1 shadow-sm backdrop-blur lg:grid">
+              <div
+                className="absolute left-1/2 top-3 z-[500] hidden -translate-x-1/2 grid-cols-2 rounded-[12px] border border-white/50 bg-[#E9E2D5]/90 p-1 shadow-sm backdrop-blur lg:grid"
+                style={
+                  rightPanelMode === "map"
+                    ? {
+                        left: showAllDays
+                          ? "calc(50% + 148px)"
+                          : "calc(50% + 378px)",
+                      }
+                    : undefined
+                }
+              >
                 {(
                   [
                     ["map", "Map", MapIcon],
@@ -2326,6 +2410,7 @@ export function PlannerView({
                   <MapView
                     stops={wholeTripStops}
                     viewportKey={`trip-${trip.id}`}
+                    desktopLeftInset={296}
                     stopColors={allStopColors}
                     markerLabels={allMarkerLabels}
                     activeStopId={selectedStopId ?? undefined}
@@ -2335,6 +2420,7 @@ export function PlannerView({
                   <MapView
                     stops={currentMapStops}
                     viewportKey={`day-${currentDayId ?? "empty"}`}
+                    desktopLeftInset={756}
                     stopColors={currentStopColors}
                     markerLabels={currentMarkerLabels}
                     activeStopId={selectedStopId ?? undefined}
@@ -2358,7 +2444,10 @@ export function PlannerView({
               onUpdatePackingCategories={savePackingCategories}
               onSaveStay={saveStay}
               onDeleteStay={removeStay}
+              tripId={trip.id}
               tripName={trip.name}
+              trips={trips}
+              heroImageUrl={trip.heroImageUrl}
               dayCount={days.length}
               onLogoClick={() => setTab("landing")}
               tripContext={buildPackingTripContext(
@@ -2392,9 +2481,10 @@ export function PlannerView({
         {tab !== "landing" && (
           <FloatingTripNav
             activeTab={tab}
-            currentTrip={trip}
-            trips={trips}
             onSelectTab={setTab}
+            onOpenAi={() => setTripAiOpen(true)}
+            onAddDay={addDay}
+            addDayDisabled={isAddingDay || isImportingTrip}
           />
         )}
       </div>
@@ -2404,183 +2494,75 @@ export function PlannerView({
 
 function FloatingTripNav({
   activeTab,
-  currentTrip,
-  trips,
   onSelectTab,
+  onOpenAi,
+  onAddDay,
+  addDayDisabled,
 }: {
   activeTab: ViewKey;
-  currentTrip: TripPlain;
-  trips: TripSwitcherItem[];
   onSelectTab: (tab: ViewKey) => void;
+  onOpenAi: () => void;
+  onAddDay: () => void;
+  addDayDisabled: boolean;
 }) {
-  const router = useRouter();
-  const [open, setOpen] = useState(false);
-  const [creating, setCreating] = useState(false);
-  const switcherRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-
-    function handlePointerDown(event: PointerEvent) {
-      if (
-        switcherRef.current &&
-        !switcherRef.current.contains(event.target as Node)
-      ) {
-        setOpen(false);
-      }
-    }
-
-    document.addEventListener("pointerdown", handlePointerDown);
-    return () => document.removeEventListener("pointerdown", handlePointerDown);
-  }, [open]);
-
-  const sortedTrips = useMemo(
-    () => [
-      ...trips.filter((item) => item.id === currentTrip.id),
-      ...trips.filter((item) => item.id !== currentTrip.id),
-    ],
-    [currentTrip.id, trips],
-  );
-
   return (
-    <>
-      <div
-        ref={switcherRef}
-        className="fixed bottom-3 left-1/2 z-[9999] w-auto max-w-[calc(100vw-24px)] -translate-x-1/2 sm:bottom-5 sm:max-w-[calc(100vw-32px)]"
-      >
-        {open && (
-          <div className="absolute bottom-[calc(100%+10px)] left-0 w-[min(360px,calc(100vw-32px))] overflow-hidden rounded-[24px] border border-border bg-card/98 shadow-[0_18px_50px_rgba(22,19,13,0.24)] backdrop-blur-md">
-            <div className="flex items-center justify-between border-b border-border px-4 py-3">
-              <div>
-                <p className="text-[11px] font-black uppercase tracking-[0.12em] text-muted-foreground">
-                  Your trips
-                </p>
-                <p className="text-sm font-black text-foreground">
-                  Switch roadtrip
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setOpen(false);
-                  setCreating(true);
-                }}
-                className="grid size-9 place-items-center rounded-full bg-brand text-brand-foreground shadow-[0_10px_22px_rgba(228,86,42,0.24)] transition-colors hover:bg-[#cf4822]"
-                aria-label="Create new trip"
-              >
-                <Plus className="size-4" />
-              </button>
-            </div>
+    <div className="fixed bottom-3.5 left-1/2 z-[9999] w-auto max-w-[calc(100vw-24px)] -translate-x-1/2 sm:bottom-5 sm:max-w-[calc(100vw-32px)]">
+      <nav className="flex w-auto items-center justify-center gap-1 overflow-hidden rounded-[17px] border border-border bg-card/95 p-[7px] shadow-[0_16px_42px_rgba(22,19,13,0.22)] backdrop-blur-md sm:rounded-[18px] sm:p-2">
+        {(Object.keys(TAB_LABELS) as TabKey[]).map((key) => {
+          const Icon = TAB_ICONS[key];
 
-            <div className="max-h-[310px] overflow-y-auto p-2">
-              {sortedTrips.map((item) => {
-                const active = item.id === currentTrip.id;
-                return (
-                  <Link
-                    key={item.id}
-                    href={`/trips/${item.id}`}
-                    prefetch={false}
-                    onMouseEnter={() =>
-                      !active && router.prefetch(`/trips/${item.id}`)
-                    }
-                    onFocus={() =>
-                      !active && router.prefetch(`/trips/${item.id}`)
-                    }
-                    onClick={(event) => {
-                      setOpen(false);
-                      if (active) event.preventDefault();
-                    }}
-                    className={
-                      "grid w-full grid-cols-[48px_minmax(0,1fr)_22px] items-center gap-3 rounded-[18px] px-2 py-2 text-left transition-colors " +
-                      (active ? "bg-[#fff4e4]" : "hover:bg-[#fffaf0]")
-                    }
-                  >
-                    <span className="grid size-12 place-items-center overflow-hidden rounded-[16px] bg-muted text-brand">
-                      {item.heroImageUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={item.heroImageUrl}
-                          alt=""
-                          className="h-full w-full object-cover"
-                        />
-                      ) : (
-                        <RouteIcon className="size-5" />
-                      )}
-                    </span>
-                    <span className="min-w-0">
-                      <span className="block truncate text-sm font-black text-foreground">
-                        {item.name}
-                      </span>
-                      <span className="mt-1 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
-                        <Calendar className="size-3.5 text-brand" />
-                        {tripMetaLabel(item)}
-                      </span>
-                    </span>
-                    {active && <Check className="size-4 text-brand" />}
-                  </Link>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        <nav className="flex w-auto items-center justify-center gap-0.5 overflow-hidden rounded-full border border-border bg-card/95 p-1.5 shadow-[0_16px_42px_rgba(22,19,13,0.22)] backdrop-blur-md sm:justify-start sm:gap-1 sm:overflow-x-auto sm:p-2">
-          <button
-            type="button"
-            onClick={() => setOpen((current) => !current)}
-            className="flex min-w-0 shrink-0 items-center gap-0.5 rounded-full px-2.5 py-2 text-sm font-black text-foreground transition-colors hover:bg-muted sm:max-w-[210px] sm:gap-2 sm:px-4"
-            aria-expanded={open}
-          >
-            <RouteIcon className="size-4 shrink-0 text-brand" />
-            <span className="hidden truncate sm:inline">
-              {currentTrip.name}
-            </span>
-            <ChevronDown
+          return (
+            <button
+              key={key}
+              type="button"
+              onClick={() => onSelectTab(key)}
               className={
-                "size-4 shrink-0 text-brand transition-transform " +
-                (open ? "rotate-180" : "")
+                "inline-flex shrink-0 items-center gap-2 rounded-[11px] px-2.5 py-[9px] text-sm transition-colors sm:rounded-[12px] sm:px-5 sm:py-2 " +
+                (activeTab === key
+                  ? "bg-brand font-black text-brand-foreground shadow-[0_10px_22px_rgba(228,86,42,0.24)]"
+                  : "font-medium text-muted-foreground hover:bg-muted hover:text-foreground")
               }
-            />
-          </button>
-
-          {(Object.keys(TAB_LABELS) as TabKey[]).map((key) => {
-            const Icon = TAB_ICONS[key];
-
-            return (
-              <button
-                key={key}
-                type="button"
-                onClick={() => onSelectTab(key)}
+            >
+              <Icon
                 className={
-                  "inline-flex shrink-0 items-center gap-2 rounded-full px-2.5 py-2 text-sm transition-colors sm:px-5 " +
-                  (activeTab === key
-                    ? "bg-brand font-black text-brand-foreground shadow-[0_10px_22px_rgba(228,86,42,0.24)]"
-                    : "font-medium text-muted-foreground hover:bg-muted hover:text-foreground")
+                  "size-[18px] shrink-0 sm:size-4 " +
+                  (activeTab === key ? "text-brand-foreground" : "text-brand")
                 }
-              >
-                <Icon
-                  className={
-                    "size-4 shrink-0 " +
-                    (activeTab === key ? "text-brand-foreground" : "text-brand")
-                  }
-                />
-                <span className="hidden sm:inline">{TAB_LABELS[key]}</span>
-              </button>
-            );
-          })}
-        </nav>
-      </div>
-
-      <NewTripDialog open={creating} onOpenChange={setCreating} />
-    </>
+              />
+              <span className="hidden sm:inline">{TAB_LABELS[key]}</span>
+            </button>
+          );
+        })}
+        {activeTab === "planner" && (
+          <>
+            <span
+              aria-hidden
+              className="mx-0.5 h-7 w-px shrink-0 bg-border sm:hidden"
+            />
+            <button
+              type="button"
+              onClick={onOpenAi}
+              className="grid size-9 shrink-0 place-items-center rounded-[11px] text-[#8A5F4D] transition-colors hover:bg-[#FBE7DD] hover:text-[#C6532D] sm:hidden"
+              title="AI trip tools"
+              aria-label="AI trip tools"
+            >
+              <Sparkles className="size-[18px]" />
+            </button>
+            <button
+              type="button"
+              onClick={onAddDay}
+              disabled={addDayDisabled}
+              className="grid size-9 shrink-0 place-items-center rounded-[11px] bg-brand text-brand-foreground shadow-[0_8px_18px_rgba(228,86,42,0.2)] transition-colors hover:bg-[#CF4822] disabled:cursor-default disabled:opacity-50 sm:hidden"
+              title="Add day"
+              aria-label="Add day"
+            >
+              <Plus className="size-[18px]" />
+            </button>
+          </>
+        )}
+      </nav>
+    </div>
   );
-}
-
-function tripMetaLabel(trip: TripSwitcherItem) {
-  const pieces = [];
-  if (trip.startDate) pieces.push(formatDayDateLabel(trip.startDate));
-  pieces.push(`${trip.dayCount || 0} ${trip.dayCount === 1 ? "day" : "days"}`);
-  return pieces.filter(Boolean).join(" · ");
 }
 
 function mergePackingFields(

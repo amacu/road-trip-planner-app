@@ -18,7 +18,7 @@ export function TripSummaryCard({
         onClick={onSelect}
         title="Show the whole trip on the map"
         className={cn(
-          "flex h-[76px] w-[62px] shrink-0 snap-start flex-col items-center justify-center rounded-[13px] border px-1 text-center shadow-[0_4px_12px_rgba(22,19,13,0.05)] sm:w-[68px] lg:hidden",
+          "flex h-[76px] w-[62px] shrink-0 snap-start flex-col items-center justify-center rounded-[13px] border px-1 text-center sm:w-[68px] lg:hidden",
           active
             ? "border-[#16130D] bg-[#16130D] text-[#F3EDE1]"
             : "border-[#DED3C0] bg-[#FAF6EE] text-[#B45A3C]",
