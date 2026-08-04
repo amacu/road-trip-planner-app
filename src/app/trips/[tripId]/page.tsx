@@ -43,10 +43,6 @@ export default async function TripPlannerPage({
       ? {
           userId: user.id,
           email: user.email ?? "",
-          fullName:
-            typeof userMetadata.full_name === "string"
-              ? userMetadata.full_name
-              : null,
           username:
             typeof userMetadata.username === "string"
               ? userMetadata.username
@@ -74,12 +70,6 @@ export default async function TripPlannerPage({
       }))}
       initialFuelPrices={fuelPrices}
       currentUserId={user.id}
-      currentUserFullName={
-        typeof userMetadata.full_name === "string"
-          ? userMetadata.full_name
-          : null
-      }
-      currentUserEmail={user.email}
       currentUserAvatarUrl={
         typeof userMetadata.avatar_url === "string"
           ? userMetadata.avatar_url

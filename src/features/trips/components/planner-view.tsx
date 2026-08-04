@@ -294,8 +294,6 @@ export function PlannerView({
   vehicles,
   trips,
   currentUserId,
-  currentUserFullName,
-  currentUserEmail,
   currentUserAvatarUrl,
   initialFuelPrices,
 }: {
@@ -303,8 +301,6 @@ export function PlannerView({
   vehicles: VehiclePlain[];
   trips: TripSwitcherItem[];
   currentUserId: string;
-  currentUserFullName?: string | null;
-  currentUserEmail?: string | null;
   currentUserAvatarUrl?: string | null;
   initialFuelPrices: FuelCountryPrice[];
 }) {
@@ -2020,8 +2016,6 @@ export function PlannerView({
       )}
       {tab !== "landing" && (
         <CollapsedSidebar
-          userFullName={currentUserFullName}
-          userEmail={currentUserEmail}
           userAvatarUrl={currentUserAvatarUrl}
           onLogoClick={() => setTab("landing")}
           onProfileClick={() => router.push("/profile")}

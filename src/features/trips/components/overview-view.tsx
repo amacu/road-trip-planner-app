@@ -848,7 +848,7 @@ function TeamRow({
 }
 
 function profileName(profile: TripPlain["ownerProfile"] | null | undefined) {
-  return profile?.fullName || profile?.username || profile?.email || null;
+  return profile?.username || profile?.email || null;
 }
 
 function profileDetail(profile: TripPlain["ownerProfile"] | null | undefined) {
@@ -861,7 +861,7 @@ function profileDetail(profile: TripPlain["ownerProfile"] | null | undefined) {
 }
 
 function memberName(member: TripPlain["members"][number]) {
-  return member.fullName || member.username || member.email || "Collaborator";
+  return member.username || member.email || "Collaborator";
 }
 
 function memberDetail(member: TripPlain["members"][number]) {

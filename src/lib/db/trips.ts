@@ -57,6 +57,33 @@ export async function getTripSwitcherItems(userId: string) {
   });
 }
 
+export async function getTripsOverviewItems(userId: string) {
+  return prisma.trip.findMany({
+    where: tripAccessWhere(userId),
+    orderBy: { updatedAt: "desc" },
+    select: {
+      id: true,
+      userId: true,
+      name: true,
+      description: true,
+      heroImageUrl: true,
+      startDate: true,
+      dayCount: true,
+      updatedAt: true,
+      days: {
+        orderBy: { dayNumber: "asc" },
+        select: {
+          stops: {
+            orderBy: { stopOrder: "asc" },
+            select: { name: true },
+          },
+        },
+      },
+      _count: { select: { days: true, stops: true, members: true } },
+    },
+  });
+}
+
 export async function getTripById(tripId: string, userId: string) {
   return prisma.trip.findFirst({
     where: { id: tripId, ...tripAccessWhere(userId) },

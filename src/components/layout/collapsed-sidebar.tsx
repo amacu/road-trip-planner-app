@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import {
-  CarFront,
   Check,
   ChevronDown,
   LayoutGrid,
@@ -23,8 +23,6 @@ export type SidebarTripItem = {
 };
 
 type CollapsedSidebarProps = {
-  userFullName?: string | null;
-  userEmail?: string | null;
   userAvatarUrl?: string | null;
   onLogoClick?: () => void;
   onProfileClick?: () => void;
@@ -42,6 +40,7 @@ export function CollapsedSidebar({
   activeTripId,
   onSelectTrip,
 }: CollapsedSidebarProps) {
+  const pathname = usePathname();
   const [creating, setCreating] = useState(false);
   const [tripMenuOpen, setTripMenuOpen] = useState(false);
   const tripMenuRef = useRef<HTMLDivElement>(null);
@@ -86,6 +85,7 @@ export function CollapsedSidebar({
     </span>
   );
   const activeTrip = trips?.find((trip) => trip.id === activeTripId);
+  const tripSwitcherActive = pathname.startsWith("/trips/");
 
   return (
     <aside className="relative z-[1000] hidden h-[68px] w-full shrink-0 items-center border-b border-[#E4DBC8] bg-[#FBF8F1] px-5 py-3 shadow-[0_8px_22px_-18px_rgba(22,19,13,0.55)] md:flex">
@@ -112,8 +112,24 @@ export function CollapsedSidebar({
 
       {trips && (
         <div className="absolute left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-[14px] border border-[#E2D8C6] bg-[#EEE7DA]/80 p-1 shadow-[0_4px_14px_rgba(22,19,13,0.06)]">
-          <ComingSoonMenuItem icon={LayoutGrid} label="All trips" />
-          <ComingSoonMenuItem icon={CarFront} label="Vehicles" />
+          <Link
+            href="/trips"
+            aria-current={pathname === "/trips" ? "page" : undefined}
+            className={cn(
+              "inline-flex h-9 shrink-0 items-center gap-1.5 rounded-[10px] px-2.5 text-[10.5px] font-bold transition-colors",
+              pathname === "/trips"
+                ? "bg-[#FFFCF6] text-[#A93D1D] shadow-sm"
+                : "text-[#71695C] hover:bg-[#E5DDCF] hover:text-[#302B23]",
+            )}
+          >
+            <LayoutGrid
+              className={cn(
+                "size-3.5",
+                pathname === "/trips" ? "text-brand" : "text-[#9A765F]",
+              )}
+            />
+            All trips
+          </Link>
           <div ref={tripMenuRef} className="relative">
             <button
               type="button"
@@ -121,9 +137,19 @@ export function CollapsedSidebar({
               aria-expanded={tripMenuOpen}
               aria-haspopup="menu"
               aria-controls="trip-switcher-menu"
-              className="flex h-9 max-w-[min(34vw,320px)] items-center gap-2 rounded-[10px] bg-[#FFFCF6] px-3 text-[11px] font-black text-[#302B23] shadow-sm outline-none transition-all hover:bg-white focus-visible:ring-2 focus-visible:ring-brand/40"
+              className={cn(
+                "flex h-9 max-w-[min(34vw,320px)] items-center gap-2 rounded-[10px] px-3 text-[11px] font-black outline-none transition-all focus-visible:ring-2 focus-visible:ring-brand/40",
+                tripSwitcherActive
+                  ? "bg-[#FFFCF6] text-[#302B23] shadow-sm hover:bg-white"
+                  : "text-[#71695C] hover:bg-[#E5DDCF] hover:text-[#302B23]",
+              )}
             >
-              <MapPinned className="size-3.5 shrink-0 text-[#C94B25]" />
+              <MapPinned
+                className={cn(
+                  "size-3.5 shrink-0",
+                  tripSwitcherActive ? "text-[#C94B25]" : "text-[#9A765F]",
+                )}
+              />
               <span className="truncate">{activeTrip?.name ?? "Trips"}</span>
               <ChevronDown
                 className={cn(
@@ -208,25 +234,5 @@ export function CollapsedSidebar({
       </div>
       <NewTripDialog open={creating} onOpenChange={setCreating} />
     </aside>
-  );
-}
-
-function ComingSoonMenuItem({
-  icon: Icon,
-  label,
-}: {
-  icon: typeof LayoutGrid;
-  label: string;
-}) {
-  return (
-    <button
-      type="button"
-      aria-disabled="true"
-      title={`${label} · Coming soon`}
-      className="inline-flex h-9 shrink-0 cursor-default items-center gap-1.5 rounded-[10px] px-2.5 text-[10.5px] font-bold text-[#71695C] transition-colors hover:bg-[#E5DDCF] hover:text-[#302B23]"
-    >
-      <Icon className="size-3.5 text-[#9A765F]" />
-      {label}
-    </button>
   );
 }

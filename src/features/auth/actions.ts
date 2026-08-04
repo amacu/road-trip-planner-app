@@ -63,7 +63,6 @@ export async function updateProfileAction(
   const supabase = await getSupabaseServerClient();
   const { data, error } = await supabase.auth.updateUser({
     data: {
-      full_name: parsed.data.fullName,
       username: parsed.data.username,
       language: parsed.data.language,
       currency: parsed.data.currency,

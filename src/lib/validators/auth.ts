@@ -38,7 +38,6 @@ export const resetPasswordSchema = z
   });
 
 export const profileUpdateSchema = z.object({
-  fullName: z.string().trim().min(1, "Enter your full name").max(120),
   username: z
     .string()
     .trim()

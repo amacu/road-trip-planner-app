@@ -9,8 +9,6 @@ export async function ensureUserProfile(user: User) {
 
   return withDatabaseRetry(async () => {
     const metadata = user.user_metadata ?? {};
-    const fullName =
-      typeof metadata.full_name === "string" ? metadata.full_name.trim() : null;
     const metadataUsername =
       typeof metadata.username === "string" ? metadata.username.trim() : null;
     const existing = await prisma.userProfile.findUnique({
@@ -36,13 +34,11 @@ export async function ensureUserProfile(user: User) {
       where: { userId: user.id },
       update: {
         email,
-        fullName,
         username,
       },
       create: {
         userId: user.id,
         email,
-        fullName,
         username: username ?? (await makeUniqueUsername(email)),
       },
     });
@@ -58,7 +54,6 @@ export async function findUserProfileByIdentifier(identifier: string) {
       OR: [
         { email: { equals: value.toLowerCase(), mode: "insensitive" } },
         { username: { equals: normalizeUsername(value), mode: "insensitive" } },
-        { fullName: { equals: value, mode: "insensitive" } },
       ],
     },
   });

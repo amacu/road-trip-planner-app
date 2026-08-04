@@ -97,14 +97,12 @@ model UserProfile {
   id        String   @id @default(uuid()) @db.Uuid
   userId    String   @unique @map("user_id") @db.Uuid
   email     String   @unique
-  fullName  String?  @map("full_name")
   username  String?  @unique
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   tripMemberships TripMember[]
 
-  @@index([fullName])
   @@index([username])
   @@map("user_profiles")
 }

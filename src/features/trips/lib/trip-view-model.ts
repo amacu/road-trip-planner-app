@@ -128,7 +128,6 @@ export type TripMemberPlain = {
   id: string;
   userId: string;
   email: string | null;
-  fullName: string | null;
   username: string | null;
   role: string;
   createdAt: string;
@@ -141,7 +140,6 @@ export function toTripMemberPlain(
     id: member.id,
     userId: member.userId,
     email: member.user?.email ?? null,
-    fullName: member.user?.fullName ?? null,
     username: member.user?.username ?? null,
     role: member.role,
     createdAt: member.createdAt.toISOString(),
@@ -151,20 +149,17 @@ export function toTripMemberPlain(
 export type UserProfilePlain = {
   userId: string;
   email: string;
-  fullName: string | null;
   username: string | null;
 };
 
 export function toUserProfilePlain(profile: {
   userId: string;
   email: string;
-  fullName: string | null;
   username: string | null;
 }): UserProfilePlain {
   return {
     userId: profile.userId,
     email: profile.email,
-    fullName: profile.fullName,
     username: profile.username,
   };
 }
