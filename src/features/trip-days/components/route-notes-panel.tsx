@@ -227,14 +227,16 @@ export function RouteNotesPanel({
   );
 }
 
-function EditableMarkdown({
+export function EditableMarkdown({
   value,
   emptyLabel,
   onSave,
+  compact = false,
 }: {
   value: string;
   emptyLabel: string;
   onSave: (value: string) => Promise<boolean>;
+  compact?: boolean;
 }) {
   const parsedNote = parseNoteValue(value);
   const [editing, setEditing] = useState(false);
@@ -344,7 +346,7 @@ function EditableMarkdown({
             }
           }}
           placeholder="Write Markdown…"
-          className="min-h-40 w-full resize-y rounded-[12px] border border-[#D8CEB8] bg-white p-3 font-mono text-xs leading-relaxed text-[#403A2F] outline-none focus:ring-2 focus:ring-[#E4562A]/20"
+          className={`${compact ? "min-h-28" : "min-h-40"} w-full resize-y rounded-[12px] border border-[#D8CEB8] bg-white p-3 font-mono text-xs leading-relaxed text-[#403A2F] outline-none focus:ring-2 focus:ring-[#E4562A]/20`}
         />
         <div className="mt-2 flex items-center justify-between gap-3">
           <span className="text-[10px] font-medium text-[#A09680]">

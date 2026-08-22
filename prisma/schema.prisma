@@ -139,8 +139,6 @@ model TripStay {
   latitude     Decimal? @db.Decimal(10, 7)
   longitude    Decimal? @db.Decimal(10, 7)
   countryCode  String?  @map("country_code")
-  checkInTime  String?  @map("check_in_time")
-  checkOutTime String?  @map("check_out_time")
   price        Decimal? @db.Decimal(10, 2)
   currency     String   @default("PLN")
   bookingUrl   String?  @map("booking_url")

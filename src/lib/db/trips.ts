@@ -310,8 +310,6 @@ export async function duplicateTrip(tripId: string, userId: string) {
               latitude: stay.latitude,
               longitude: stay.longitude,
               countryCode: stay.countryCode,
-              checkInTime: stay.checkInTime,
-              checkOutTime: stay.checkOutTime,
               price: stay.price,
               currency: stay.currency,
               bookingUrl: stay.bookingUrl,

@@ -42,8 +42,6 @@ export async function saveTripStayAction(
       lat: stay.latitude?.toNumber() ?? null,
       lng: stay.longitude?.toNumber() ?? null,
       countryCode: stay.countryCode,
-      checkInTime: stay.checkInTime,
-      checkOutTime: stay.checkOutTime,
       price: stay.price?.toNumber() ?? null,
       currency: stay.currency,
       bookingUrl: stay.bookingUrl,

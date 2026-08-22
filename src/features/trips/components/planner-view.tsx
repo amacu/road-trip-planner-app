@@ -5,7 +5,6 @@ import {
   LayoutDashboard,
   Map as MapIcon,
   MapPinned,
-  NotebookText,
   Plus,
   Route as RouteIcon,
   Sparkles,
@@ -55,7 +54,6 @@ import type { AiDayRouteItem } from "@/features/trip-days/components/day-panel";
 import {
   deleteTripStayAction,
   saveTripStayAction,
-  updateTripStayAction,
 } from "@/features/trip-stays/actions";
 import {
   createTripStopAction,
@@ -78,10 +76,10 @@ import type {
   TripStayPlain,
   VehiclePlain,
 } from "@/features/trips/lib/trip-view-model";
+import { activityMapPinsForStops } from "@/features/trip-stops/lib/activity-map-pins";
 import { useRouteMetrics } from "@/features/trips/hooks/use-route-metrics";
 import type { GeocodeResult } from "@/lib/integrations/geocode";
 import type { FuelCountryPrice } from "@/lib/integrations/fuel-prices";
-import { openInGoogleMaps } from "@/lib/integrations/google-maps";
 import { buildPackingTripContext } from "@/features/trips/lib/trip-export";
 import type { TripUpdateInput } from "@/lib/validators/trip";
 import type { TripStayInput } from "@/lib/validators/trip-stay";
@@ -100,11 +98,6 @@ const HomeScreen = dynamic(() =>
 const DayPanel = dynamic(() =>
   import("@/features/trip-days/components/day-panel").then(
     (module) => module.DayPanel,
-  ),
-);
-const RouteNotesPanel = dynamic(() =>
-  import("@/features/trip-days/components/route-notes-panel").then(
-    (module) => module.RouteNotesPanel,
   ),
 );
 const OverviewView = dynamic(() =>
@@ -358,11 +351,6 @@ export function PlannerView({
   // When true, the planner map shows the whole trip (all days' stops)
   // instead of just the active day — toggled by the "Trip summary" tile.
   const [showAllDays, setShowAllDays] = useState(false);
-  const [rightPanelMode, setRightPanelMode] = useState<"map" | "notes">("map");
-  const [notesFocus, setNotesFocus] = useState<{
-    stopId: string;
-    request: number;
-  } | null>(null);
   // The stop a user expanded in the day panel — the map recenters on it
   // and shows its activities as extra pins while it's selected.
   const [selectedStopId, setSelectedStopId] = useState<string | null>(null);
@@ -370,7 +358,7 @@ export function PlannerView({
   const pasteInFlightRef = useRef(false);
   const [tab, setTab] = useState<ViewKey>("overview");
   const [mobilePlannerPane, setMobilePlannerPane] = useState<
-    "itinerary" | "map" | "notes"
+    "itinerary" | "map"
   >("itinerary");
   const [viewStateReady, setViewStateReady] = useState(false);
   const [fuelPrices] = useState<FuelCountryPrice[]>(initialFuelPrices);
@@ -397,14 +385,6 @@ export function PlannerView({
           )
             ? saved.selectedStopId
             : null;
-        const notesStopId =
-          typeof saved.notesStopId === "string" &&
-          initialDays.some((day) =>
-            day.stops.some((stop) => stop.id === saved.notesStopId),
-          )
-            ? saved.notesStopId
-            : null;
-
         if (
           saved.tab === "landing" ||
           saved.tab === "overview" ||
@@ -418,22 +398,12 @@ export function PlannerView({
           setShowAllDays(saved.showAllDays);
         }
         if (
-          saved.rightPanelMode === "map" ||
-          saved.rightPanelMode === "notes"
-        ) {
-          setRightPanelMode(saved.rightPanelMode);
-        }
-        if (
           saved.mobilePlannerPane === "itinerary" ||
-          saved.mobilePlannerPane === "map" ||
-          saved.mobilePlannerPane === "notes"
+          saved.mobilePlannerPane === "map"
         ) {
           setMobilePlannerPane(saved.mobilePlannerPane);
         }
         setSelectedStopId(savedStopId);
-        if (saved.rightPanelMode === "notes" && notesStopId) {
-          setNotesFocus({ stopId: notesStopId, request: Date.now() });
-        }
       }
     } catch {
       try {
@@ -456,10 +426,8 @@ export function PlannerView({
           tab,
           activeDayId,
           showAllDays,
-          rightPanelMode,
           mobilePlannerPane,
           selectedStopId,
-          notesStopId: notesFocus?.stopId ?? null,
         }),
       );
     } catch {
@@ -468,8 +436,6 @@ export function PlannerView({
   }, [
     activeDayId,
     mobilePlannerPane,
-    notesFocus?.stopId,
-    rightPanelMode,
     selectedStopId,
     showAllDays,
     tab,
@@ -683,22 +649,23 @@ export function PlannerView({
     () => deferredMapDays.find((day) => day.id === currentDayId)?.stops ?? [],
     [currentDayId, deferredMapDays],
   );
-  const allStops = useMemo(
-    () => deferredMapDays.flatMap((day) => day.stops),
+  const activityPinsByDay = useMemo(
+    () =>
+      new Map(
+        deferredMapDays.map((day) => [
+          day.id,
+          activityMapPinsForStops(day.stops),
+        ]),
+      ),
     [deferredMapDays],
   );
-  const selectedStopActivityPins = useMemo(
-    () =>
-      allStops
-        .find((stop) => stop.id === selectedStopId)
-        ?.activities.filter((a) => a.lat !== 0 || a.lng !== 0)
-        .map((a) => ({
-          id: a.id,
-          lat: a.lat,
-          lng: a.lng,
-          title: a.title,
-        })) ?? [],
-    [allStops, selectedStopId],
+  const currentActivityPins = useMemo(
+    () => activityPinsByDay.get(currentDayId ?? "") ?? [],
+    [activityPinsByDay, currentDayId],
+  );
+  const wholeTripActivityPins = useMemo(
+    () => [...activityPinsByDay.values()].flat(),
+    [activityPinsByDay],
   );
   const allStopColors = useMemo(
     () =>
@@ -816,9 +783,6 @@ export function PlannerView({
     [deferredRouteDays, stays],
   );
   const currentRouteDay = routeDays.find((day) => day.id === currentDayId);
-  const currentRouteStops = drivingRouteStops(
-    currentRouteDay?.stops ?? currentStops,
-  );
   const allCurrentRouteStops = currentRouteDay?.allRouteStops ?? currentStops;
   const currentMapStops = useMemo(
     () =>
@@ -1249,19 +1213,7 @@ export function PlannerView({
     setSelectedStopId(null);
   }, []);
 
-  function openNotesForStop(stopId: string) {
-    setNotesFocus((current) => ({
-      stopId,
-      request: (current?.request ?? 0) + 1,
-    }));
-    setRightPanelMode("notes");
-  }
-
   function selectStopForActivePanel(stopId: string) {
-    if (rightPanelMode === "notes") {
-      openNotesForStop(stopId);
-      return;
-    }
     setSelectedStopId(stopId);
   }
 
@@ -1357,26 +1309,6 @@ export function PlannerView({
       return;
     }
     router.refresh();
-  }
-
-  async function updateDayNotes(
-    dayId: string,
-    notes: string,
-  ): Promise<boolean> {
-    const previousDays = days;
-    setDays((current) =>
-      current.map((day) =>
-        day.id === dayId ? { ...day, notes: notes.trim() || null } : day,
-      ),
-    );
-
-    const result = await updateTripDayAction(trip.id, dayId, { notes });
-    if (!result.success) {
-      setDays(previousDays);
-      toast.error(result.error);
-      return false;
-    }
-    return true;
   }
 
   async function addStop(
@@ -1794,8 +1726,6 @@ export function PlannerView({
             latitude: isOvernightDrive ? null : overnight.latitude,
             longitude: isOvernightDrive ? null : overnight.longitude,
             countryCode: isOvernightDrive ? null : overnight.countryCode,
-            checkInTime: null,
-            checkOutTime: null,
             price: null,
             currency: "PLN",
             notes:
@@ -1847,25 +1777,6 @@ export function PlannerView({
     });
     if (!result.success) {
       setDays(previousDays);
-      toast.error(result.error);
-      return false;
-    }
-    return true;
-  }
-
-  async function updateStayNotes(
-    stayId: string,
-    notes: string,
-  ): Promise<boolean> {
-    const previousStays = stays;
-    setStays((current) =>
-      current.map((stay) =>
-        stay.id === stayId ? { ...stay, notes: notes.trim() || null } : stay,
-      ),
-    );
-    const result = await updateTripStayAction(trip.id, stayId, { notes });
-    if (!result.success) {
-      setStays(previousStays);
       toast.error(result.error);
       return false;
     }
@@ -2134,12 +2045,11 @@ export function PlannerView({
                   </button>
                 </div>
               </header>
-              <div className="order-1 mx-3 mt-3 grid shrink-0 grid-cols-3 rounded-[12px] border border-white/50 bg-[#E9E2D5]/90 p-1 backdrop-blur lg:hidden">
+              <div className="order-1 mx-3 mt-3 grid shrink-0 grid-cols-2 rounded-[12px] border border-white/50 bg-[#E9E2D5]/90 p-1 backdrop-blur lg:hidden">
                 {(
                   [
                     ["itinerary", "Itinerary", RouteIcon],
                     ["map", "Map", MapIcon],
-                    ["notes", "Notes", NotebookText],
                   ] as const
                 ).map(([pane, label, Icon]) => (
                   <button
@@ -2147,7 +2057,6 @@ export function PlannerView({
                     type="button"
                     onClick={() => {
                       setMobilePlannerPane(pane);
-                      if (pane !== "itinerary") setRightPanelMode(pane);
                     }}
                     className={cn(
                       "inline-flex h-8 items-center justify-center gap-1.5 rounded-[9px] px-3 text-[11px] font-bold transition-all",
@@ -2245,7 +2154,6 @@ export function PlannerView({
                     setShowAllDays(true);
                     setSelectedStopId(null);
                     setMobilePlannerPane("map");
-                    setRightPanelMode("map");
                   }}
                 />
               </div>
@@ -2305,8 +2213,9 @@ export function PlannerView({
                     onSetDayStartTime={(startTime) =>
                       setDayStartTime(currentDay.id, startTime)
                     }
-                    onLaunchNav={() => openInGoogleMaps(currentRouteStops)}
-                    onOpenStopNotes={openNotesForStop}
+                    onSaveStopNotes={(stopId, notes) =>
+                      updateStop(stopId, { description: notes })
+                    }
                     onSelectStop={selectStopForActivePanel}
                     stay={currentStay}
                     previousStay={previousStay}
@@ -2340,67 +2249,16 @@ export function PlannerView({
 
             <section
               className={cn(
-                "relative min-h-0 min-w-0 max-w-full flex-1 flex-col overflow-hidden lg:z-0 lg:min-h-[400px] lg:flex",
-                !showAllDays &&
-                  rightPanelMode === "map" &&
-                  "lg:col-start-1 lg:col-end-4 lg:row-start-1",
+                "relative min-h-0 min-w-0 max-w-full flex-1 flex-col overflow-hidden bg-[#EEEAE1] lg:z-0 lg:min-h-[400px] lg:flex",
+                !showAllDays && "lg:col-start-1 lg:col-end-4 lg:row-start-1",
                 showAllDays && "lg:col-start-1 lg:col-end-3 lg:row-start-1",
                 mobilePlannerPane !== "itinerary" || showAllDays
                   ? "flex"
                   : "hidden",
-                rightPanelMode === "notes" ? "bg-[#FFFCF6]" : "bg-[#EEEAE1]",
               )}
             >
-              <div
-                className="absolute left-1/2 top-3 z-[500] hidden -translate-x-1/2 grid-cols-2 rounded-[12px] border border-white/50 bg-[#E9E2D5]/90 p-1 shadow-sm backdrop-blur lg:grid"
-                style={
-                  rightPanelMode === "map"
-                    ? {
-                        left: showAllDays
-                          ? "calc(50% + 148px)"
-                          : "calc(50% + 378px)",
-                      }
-                    : undefined
-                }
-              >
-                {(
-                  [
-                    ["map", "Map", MapIcon],
-                    ["notes", "Notes", NotebookText],
-                  ] as const
-                ).map(([value, label, Icon]) => (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => setRightPanelMode(value)}
-                    className={`inline-flex h-8 items-center justify-center gap-1.5 rounded-[9px] px-4 text-xs font-bold transition ${
-                      rightPanelMode === value
-                        ? "bg-white text-[#16130D] shadow-sm"
-                        : "text-[#8A8270] hover:text-[#5F594D]"
-                    }`}
-                  >
-                    <Icon className="size-3.5" />
-                    {label}
-                  </button>
-                ))}
-              </div>
               <div className="relative min-h-0 flex-1">
-                {rightPanelMode === "notes" ? (
-                  <div className="h-full lg:pt-[58px]">
-                    <RouteNotesPanel
-                      days={showAllDays ? days : currentDay ? [currentDay] : []}
-                      stays={stays}
-                      focusEntryId={notesFocus?.stopId}
-                      focusRequest={notesFocus?.request}
-                      showDayHeadings={showAllDays}
-                      onUpdateDayNotes={updateDayNotes}
-                      onUpdateStopNotes={(stopId, notes) =>
-                        updateStop(stopId, { description: notes })
-                      }
-                      onUpdateStayNotes={updateStayNotes}
-                    />
-                  </div>
-                ) : showAllDays ? (
+                {showAllDays ? (
                   <MapView
                     stops={wholeTripStops}
                     viewportKey={`trip-${trip.id}`}
@@ -2408,7 +2266,7 @@ export function PlannerView({
                     stopColors={allStopColors}
                     markerLabels={allMarkerLabels}
                     activeStopId={selectedStopId ?? undefined}
-                    activityPins={selectedStopActivityPins}
+                    activityPins={wholeTripActivityPins}
                   />
                 ) : (
                   <MapView
@@ -2418,7 +2276,7 @@ export function PlannerView({
                     stopColors={currentStopColors}
                     markerLabels={currentMarkerLabels}
                     activeStopId={selectedStopId ?? undefined}
-                    activityPins={selectedStopActivityPins}
+                    activityPins={currentActivityPins}
                   />
                 )}
               </div>

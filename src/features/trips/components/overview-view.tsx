@@ -43,6 +43,7 @@ import {
   updateTripMemberRoleAction,
 } from "@/features/trips/actions";
 import { TripSettingsPanel } from "@/features/trips/components/trip-settings-view";
+import { activityMapPinsForStops } from "@/features/trip-stops/lib/activity-map-pins";
 import type {
   StopPoint,
   TripPlain,
@@ -137,6 +138,9 @@ export function OverviewView({
     }
     return dayStops;
   });
+  const overviewActivityPins = days.flatMap((day) =>
+    activityMapPinsForStops(day.stops),
+  );
   const stopColors = buildDayStopColors(days);
   days.forEach((day, index) => {
     const stay = stays.find((item) => item.afterDayId === day.id);
@@ -206,6 +210,7 @@ export function OverviewView({
           viewportKey={`overview-${trip.id}`}
           desktopLeftInset={736}
           stopColors={stopColors}
+          activityPins={overviewActivityPins}
         />
       </div>
 

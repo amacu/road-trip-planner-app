@@ -82,8 +82,7 @@ export function DayPanel({
   onCopyStop,
   onPasteCopiedStop,
   onSetDayStartTime,
-  onLaunchNav,
-  onOpenStopNotes,
+  onSaveStopNotes,
   onSelectStop,
   stay,
   previousStay,
@@ -130,8 +129,7 @@ export function DayPanel({
   onCopyStop: (stop: StopPoint) => void;
   onPasteCopiedStop: () => Promise<boolean>;
   onSetDayStartTime: (startTime: string) => void;
-  onLaunchNav: () => void;
-  onOpenStopNotes?: (stopId: string) => void;
+  onSaveStopNotes?: (stopId: string, notes: string) => Promise<boolean>;
   /** Called with a stop's id when it's expanded/selected — lets the map recenter on it and show its activities. */
   onSelectStop?: (stopId: string) => void;
   stay?: TripStayPlain;
@@ -383,16 +381,6 @@ export function DayPanel({
           </div>
 
           <div className="flex shrink-0 items-center gap-1.5">
-            <button
-              type="button"
-              onClick={onLaunchNav}
-              disabled={stops.length < 2}
-              className="grid size-[34px] place-items-center rounded-[10px] border-0 bg-[#16130D] text-white shadow-[0_8px_18px_rgba(22,19,13,0.18)] transition-colors hover:bg-[#2a251b] disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none"
-              title="Start navigation in Google Maps"
-              aria-label="Start navigation in Google Maps"
-            >
-              <Navigation className="size-4" />
-            </button>
             {copiedItemName && (
               <button
                 type="button"
@@ -524,7 +512,11 @@ export function DayPanel({
                     onRemove={() => onRemoveStop(stop.id)}
                     onMoveUp={() => moveStop(i, -1)}
                     onMoveDown={() => moveStop(i, 1)}
-                    onOpenNotes={() => onOpenStopNotes?.(stop.id)}
+                    onSaveNotes={
+                      onSaveStopNotes
+                        ? (notes) => onSaveStopNotes(stop.id, notes)
+                        : undefined
+                    }
                     onSelect={() => onSelectStop?.(stop.id)}
                   />
                 )}
@@ -695,8 +687,6 @@ export function DayPanel({
             latitude: isOvernightDrive ? null : overnight.place.lat,
             longitude: isOvernightDrive ? null : overnight.place.lng,
             countryCode: isOvernightDrive ? null : overnight.place.countryCode,
-            checkInTime: null,
-            checkOutTime: null,
             price: null,
             currency: "PLN",
             notes: overnight.notesMarkdown || "AI-suggested overnight area.",

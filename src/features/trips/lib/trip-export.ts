@@ -124,10 +124,6 @@ export function buildTripExportPrompt(
         lines.push("", "### Overnight stay", `- ${stayDetails.join(" ")}`);
 
         const stayMeta: string[] = [];
-        if (stay.checkInTime)
-          stayMeta.push(`check-in from ${stay.checkInTime}`);
-        if (stay.checkOutTime)
-          stayMeta.push(`check-out by ${stay.checkOutTime}`);
         if (stay.price !== null) {
           stayMeta.push(`${stay.price} ${stay.currency}`);
         }
@@ -233,8 +229,6 @@ export function buildPackingTripContext(
     } else if (stay) {
       const stayDetails = [`Night: ${stay.name}`];
       if (stay.address) stayDetails.push(stay.address);
-      if (stay.checkInTime) stayDetails.push(`check-in ${stay.checkInTime}`);
-      if (stay.checkOutTime) stayDetails.push(`check-out ${stay.checkOutTime}`);
       lines.push(`- ${stayDetails.join(" · ")}`);
     } else if (dayIndex < trip.days.length - 1) {
       lines.push("- Night: not planned");

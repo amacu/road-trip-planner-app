@@ -18,16 +18,6 @@ const tripStayBaseSchema = z.object({
   latitude: z.number().min(-90).max(90).nullable().optional(),
   longitude: z.number().min(-180).max(180).nullable().optional(),
   countryCode: z.string().trim().length(2).toUpperCase().nullable().optional(),
-  checkInTime: z
-    .string()
-    .regex(/^\d{2}:\d{2}$/)
-    .nullable()
-    .optional(),
-  checkOutTime: z
-    .string()
-    .regex(/^\d{2}:\d{2}$/)
-    .nullable()
-    .optional(),
   price: z.number().min(0).max(1_000_000).nullable().optional(),
   currency: z.string().trim().length(3).toUpperCase().default("PLN"),
   bookingUrl: z.string().trim().url().nullable().optional().or(z.literal("")),

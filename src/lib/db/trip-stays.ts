@@ -30,8 +30,6 @@ function stayData(data: TripStayInput | TripStayUpdateInput) {
       data.countryCode === undefined
         ? undefined
         : data.countryCode?.toUpperCase() || null,
-    checkInTime: data.checkInTime,
-    checkOutTime: data.checkOutTime,
     price:
       data.price === undefined
         ? undefined

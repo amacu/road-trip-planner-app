@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 
-import { StayDialog } from "@/features/trip-stays/components/stay-card";
+import { StayEditor } from "@/features/trip-stays/components/stay-card";
 import type { TripStayPlain } from "@/features/trips/lib/trip-view-model";
 import type { TripStayInput } from "@/lib/validators/trip-stay";
 
@@ -249,12 +249,8 @@ export function StaySummary({
           )}
 
           {selectedStayId && onSave && onDelete && (
-            <StayDialog
+            <StayEditor
               key={selectedStayId}
-              open
-              onOpenChange={(open) => {
-                if (!open) setSelectedStayId(null);
-              }}
               dayId={
                 stays.find((stay) => stay.id === selectedStayId)?.afterDayId ??
                 ""
@@ -265,6 +261,7 @@ export function StaySummary({
               }
               onSave={onSave}
               onDelete={() => onDelete(selectedStayId)}
+              onClose={() => setSelectedStayId(null)}
             />
           )}
         </>

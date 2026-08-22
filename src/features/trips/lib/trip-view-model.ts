@@ -218,8 +218,6 @@ export type TripStayPlain = {
   lat: number | null;
   lng: number | null;
   countryCode: string | null;
-  checkInTime: string | null;
-  checkOutTime: string | null;
   price: number | null;
   currency: string;
   bookingUrl: string | null;
@@ -237,8 +235,6 @@ export function toTripStayPlain(stay: {
   latitude: { toNumber(): number } | null;
   longitude: { toNumber(): number } | null;
   countryCode: string | null;
-  checkInTime: string | null;
-  checkOutTime: string | null;
   price: { toNumber(): number } | null;
   currency: string;
   bookingUrl: string | null;
@@ -255,8 +251,6 @@ export function toTripStayPlain(stay: {
     lat: stay.latitude?.toNumber() ?? null,
     lng: stay.longitude?.toNumber() ?? null,
     countryCode: stay.countryCode,
-    checkInTime: stay.checkInTime,
-    checkOutTime: stay.checkOutTime,
     price: stay.price?.toNumber() ?? null,
     currency: stay.currency,
     bookingUrl: stay.bookingUrl,

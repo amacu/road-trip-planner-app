@@ -9,13 +9,13 @@ import {
   Flag,
   Landmark,
   MapPin,
-  NotebookPen,
   Pencil,
   Trash2,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import type { StopPoint } from "@/features/trips/lib/trip-view-model";
+import { EditableMarkdown } from "@/features/trip-days/components/route-notes-panel";
 import { AddStopBox } from "@/features/trip-stops/components/add-stop-box";
 import { StopWeatherBox } from "@/features/trip-stops/components/stop-weather-box";
 import { cn } from "@/lib/utils";
@@ -57,7 +57,7 @@ export function StopCard({
   onRemove,
   onMoveUp,
   onMoveDown,
-  onOpenNotes,
+  onSaveNotes,
   onSelect,
   isExpanded,
   onExpandedChange,
@@ -88,7 +88,7 @@ export function StopCard({
   onRemove: () => void;
   onMoveUp: () => void;
   onMoveDown: () => void;
-  onOpenNotes?: () => void;
+  onSaveNotes?: (notes: string) => Promise<boolean>;
   /** Called when this stop is expanded (selected) — lets the map recenter on it and show its activities. */
   onSelect?: () => void;
   isExpanded?: boolean;
@@ -367,25 +367,6 @@ export function StopCard({
 
             <div className="flex shrink-0 items-center gap-0.5">
               {headerAction}
-              {onOpenNotes && (
-                <button
-                  type="button"
-                  onClick={onOpenNotes}
-                  className={cn(
-                    "grid size-7 place-items-center rounded-[8px] text-[#7A7264] opacity-100 transition-all focus:opacity-100",
-                    expanded
-                      ? "md:opacity-100"
-                      : "md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100",
-                    isActivity
-                      ? "hover:bg-[#E7DFF3] hover:text-[#6C4FA8]"
-                      : "hover:bg-[#EEE7DA] hover:text-brand",
-                  )}
-                  title={`Open notes for ${stop.name}`}
-                  aria-label={`Open notes for ${stop.name}`}
-                >
-                  <NotebookPen className="size-3.5" />
-                </button>
-              )}
               <button
                 type="button"
                 onClick={toggleExpanded}
@@ -527,6 +508,27 @@ export function StopCard({
               />
             )}
 
+            {onSaveNotes && (
+              <section
+                className={cn(
+                  "mt-3 rounded-[13px] border p-3",
+                  isActivity
+                    ? "border-[#D8CDE8] bg-white/35"
+                    : "border-[#DED3C0]/80 bg-[#FFFCF6]/65",
+                )}
+              >
+                <div className="mb-2 text-[9px] font-black uppercase tracking-[0.12em] text-[#9B927F]">
+                  Notes
+                </div>
+                <EditableMarkdown
+                  value={stop.description ?? ""}
+                  emptyLabel="Add useful details, links or reminders for this place."
+                  onSave={onSaveNotes}
+                  compact
+                />
+              </section>
+            )}
+
             <div className="mt-2.5 flex flex-wrap items-center gap-2">
               <div className="flex rounded-[10px] border border-[#DED3C0]/80 bg-white/20 p-0.5 font-sans">
                 {(
@@ -619,12 +621,16 @@ export function StopCard({
   );
 }
 
-function EditableStopName({
+export function EditableStopName({
   value,
   onChange,
+  ariaLabel = "Stop name",
+  placeholder,
 }: {
   value: string;
   onChange: (value: string) => void;
+  ariaLabel?: string;
+  placeholder?: string;
 }) {
   const [draft, setDraft] = useState(value);
   const committedRef = useRef(value);
@@ -650,6 +656,7 @@ function EditableStopName({
   return (
     <input
       value={draft}
+      placeholder={placeholder}
       onChange={(event) => setDraft(event.target.value)}
       onClick={(event) => event.stopPropagation()}
       onBlur={commit}
@@ -666,7 +673,7 @@ function EditableStopName({
         }
       }}
       className="block w-full min-w-0 truncate border-0 bg-transparent p-0 text-[15px] font-black leading-tight text-[#16130D] outline-none placeholder:text-[#A89F88] focus:ring-0"
-      aria-label="Stop name"
+      aria-label={ariaLabel}
     />
   );
 }
